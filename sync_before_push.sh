@@ -7,7 +7,7 @@
 echo "🔄 Conversion de tous les notebooks (.ipynb) vers scripts (.py)..."
 
 # Parcourt tous les notebooks dans les dossiers mini-project-*/
-for notebook in mini-project-*/**/*.ipynb mini-project-/*.ipynb; do
+for notebook in mini-project-*/*.ipynb mini-project-/*.ipynb; do
     if [ -f "$notebook" ]; then
         py_file="${notebook%.ipynb}.py"
         echo "→ Conversion : $notebook → $py_file"
