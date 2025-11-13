@@ -58,46 +58,68 @@ Nous travaillons par *feature branch* pour éviter de casser la branche principa
   * **`main` :** Contient uniquement le code stable et testé. **Interdit de *push* directement sur `main`.**
   * **`dev-[votre_nom]/[nom_du_travail]` :** Votre branche de travail. Par exemple : `dev-dorian/refactor-cfn` ou `dev-lise/preprocessing-aod`.
 
-### 3.2. Avant de Commencer un Travail (Tirez \!)
+---
 
-1.  **Mettez à jour** votre branche principale et créez (ou passez à) votre branche de travail :
+### 🧩 3.2. Avant de Commencer un Travail (Tirez !)
 
-    ```bash
-    git checkout main
-    git pull
-    git checkout -b dev-dorian/mini-project-2 # Si vous créez une nouvelle branche
-    # OU
-    git checkout dev-dorian/mini-project-2 # Si elle existe déjà
-    ```
+1. **Mettez à jour** votre branche principale et créez (ou passez à) votre branche de travail :
 
-2.  **Synchronisez** le notebook pour vous assurer que les versions locales `.ipynb` sont à jour avec le code `.py` tiré :
+   ```bash
+   git checkout main
+   git pull
+   git checkout -b dev-[votre_nom]/[nom_du_travail]  # Si vous créez une nouvelle branche
+   # OU
+   git checkout dev-[votre_nom]/[nom_du_travail]     # Si elle existe déjà
+   ```
 
-    ```bash
-    # Exécutez cette commande pour chaque mini-projet que vous modifiez
-    jupytext --to ipynb mini-project-1/modele_aod.py
-    ```
+2. **Rendez les scripts exécutables** (⚠️ à faire une seule fois après avoir cloné le dépôt) :
 
-    > **Note :** Si vous travaillez pour la première fois sur un fichier, il se peut que vous deviez le "paired" une fois : `jupytext --set-formats py:percent,ipynb mini-project-1/modele_aod.ipynb` (puis recommencer l'étape 2.1).
+   ```bash
+   chmod +x sync_before_push.sh
+   chmod +x sync_after_pull.sh
+   ```
 
-### 3.3. Après avoir Fini un Travail (Poussez \!)
+3. **Synchronisez les notebooks** pour que vos `.ipynb` locaux soient à jour avec les `.py` de la branche tirée :
 
-1.  **Exécutez** le code dans votre notebook `.ipynb` pour générer toutes les **sorties** et les **figures** (nécessaires pour le rendu final).
+   ```bash
+   ./sync_after_pull.sh
+   ```
 
-2.  **Synchronisez** le fichier source `.py` avec les commentaires Markdown/sorties que vous avez pu ajouter dans le `.ipynb` (cela garantit que vos interprétations sont dans le fichier versionné) :
+   > ✅ Ce script parcourt automatiquement tous les mini-projets (`mini-project-1/`, `mini-project-2/`, `mini-project-3/`, etc.)
+   > et met à jour les notebooks `.ipynb` à partir des fichiers `.py` versionnés dans le dépôt.
+   >
+   > ⚠️ Si vous travaillez pour la première fois sur un fichier et qu’une erreur apparaît, il peut être nécessaire de le *"pairer"* une fois :
+   >
+   > ```bash
+   > jupytext --set-formats py:percent,ipynb mini-project-x/nom_du_fichier.ipynb
+   > ```
 
-    ```bash
-    jupytext --to py:percent mini-project-1/modele_aod.ipynb
-    ```
+---
 
-3.  **Ajoutez, *Committez* et *Pushez* :**
+### 🧩 3.3. Après avoir Fini un Travail (Poussez !)
 
-    ```bash
-    git add mini-project-1/modele_aod.py
-    git commit -m "feat: [votre_nom] Ajout du modèle d'attention pour l'AOD"
-    git push -u origin dev-dorian/mini-project-2
-    ```
+1. **Exécutez** votre notebook `.ipynb` pour générer toutes les **sorties** et les **figures** nécessaires au rendu final.
 
-4.  **Ouverture de la *Pull Request (PR)*** : Rendez-vous sur la plateforme (GitHub/GitLab) et ouvrez une **Pull Request** de votre branche vers `main`. Demandez à un autre membre de l'équipe de **réviser** (review) votre code avant la fusion.
+2. **Synchronisez** les fichiers `.py` avec vos notebooks avant de push :
+
+   ```bash
+   ./sync_before_push.sh
+   ```
+
+   > 🔄 Ce script convertit automatiquement tous les notebooks `.ipynb` des mini-projets en scripts `.py` au format `py:percent`
+   > pour éviter les conflits de merge sur les sorties Jupyter.
+
+3. **Ajoutez, *Committez* et *Pushez* :**
+
+   ```bash
+   git add .
+   git commit -m "feat: [votre_nom] mise à jour du mini-projet"
+   git push -u origin dev-[votre_nom]/[nom_du_travail]
+   ```
+
+4. **Ouvrez une *Pull Request (PR)*** depuis votre branche vers `main` sur la plateforme (GitHub/GitLab).
+   Demandez à un autre membre de l’équipe de **review** votre code avant la fusion.
+
 
 -----
 
