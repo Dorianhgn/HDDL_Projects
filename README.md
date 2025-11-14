@@ -2,7 +2,7 @@
 
 ## 🌟 1. Bienvenue \!
 
-Ce dépôt contient les travaux de modélisation *High-Dimensional Deep Learning* (HDDL) pour la prédiction de la profondeur optique d'aérosols (AOD) sur la zone Eurasie-Sahara. Nous sommes l'équipe : **Lise, Matteo, Sara, et Dorian.**
+Ce dépôt contient les travaux de modélisation *High-Dimensional Deep Learning* (HDDL) pour la matière portant le même nom. Nous sommes l'équipe : **Lise, Matteo, Sara, et Dorian.**
 
 ## ⚙️ 2. Configuration Initiale de l'Environnement
 
@@ -56,7 +56,7 @@ Nous travaillons par *feature branch* pour éviter de casser la branche principa
 ### 3.1. Structure des Branches
 
   * **`main` :** Contient uniquement le code stable et testé. **Interdit de *push* directement sur `main`.**
-  * **`dev-[votre_nom]/[nom_du_travail]` :** Votre branche de travail. Par exemple : `dev-dorian/refactor-cfn` ou `dev-lise/preprocessing-aod`.
+  * **`dev-[votre_nom]/[nom_du_travail]` :** Votre branche de travail.
 
 ---
 
@@ -127,6 +127,6 @@ Nous travaillons par *feature branch* pour éviter de casser la branche principa
 
 Chaque sous-dossier correspond à un mini-projet. Veillez à y placer tous les scripts et notebooks associés.
 
-  * `mini-project-1/` : Modèle HDDL CFM/Diffusion initial.
+  * `mini-project-1/` : Chiens et Chats.
   * `mini-project-2/` : (À créer)
   * `mini-project-3/` : (À créer)
