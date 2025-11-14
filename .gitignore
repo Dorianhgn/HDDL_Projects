@@ -185,3 +185,6 @@ temp_results/
 .DS_Store
 
 *.ipynb
+
+*.tar.gz
+*.zip
