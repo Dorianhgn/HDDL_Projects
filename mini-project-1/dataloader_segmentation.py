@@ -1,4 +1,5 @@
 import os
+import re
 import torch
 import pandas as pd
 import numpy as np
@@ -9,7 +10,7 @@ from sklearn.model_selection import train_test_split
 import torchvision.transforms.functional as F
 
 class OxfordPetDataset(Dataset):
-    def __init__(self, root_dir, split='train', task='contours', target_size=(256, 256)):
+    def __init__(self, root_dir, split='train', task='contours', target_size=(256, 256), dataset_variant='custom'):
         """
         Classe Dataset principale pour le projet.
         
@@ -18,11 +19,13 @@ class OxfordPetDataset(Dataset):
             split (str): 'train', 'val' ou 'test'
             task (str): 'contours' (Segmentation masque) ou 'boxes' (Detection rectangle)
             target_size (tuple): Taille cible des images (H, W) ex: (256, 256)
+            dataset_variant (str): 'original' (split officiel) ou 'custom' (split aléatoire complet)
         """
         self.root_dir = root_dir
         self.split = split
         self.task = task
         self.target_size = target_size
+        self.dataset_variant = dataset_variant
         
         # Chemins des sous-dossiers
         self.images_dir = os.path.join(root_dir, 'images')
@@ -37,34 +40,103 @@ class OxfordPetDataset(Dataset):
         if self.task == 'boxes':
             self._filter_missing_xmls()
 
+    def _parse_list_file(self, file_path):
+        """
+        Lit le fichier list.txt du dataset Oxford-IIIT Pet
+        Format des lignes : Image_Name CLASS-ID SPECIES BREED-ID
+        """
+        data = []
+        if not os.path.exists(file_path):
+             raise FileNotFoundError(f"Fichier introuvable : {file_path}")
+
+        with open(file_path, 'r') as f:
+            for line in f:
+                # Ignorer les commentaires qui commencent par #
+                if line.startswith('#'):
+                    continue
+                
+                parts = line.strip().split()
+                if len(parts) != 4:
+                    continue
+                
+                image_name = parts[0]
+                class_id = int(parts[1])
+                species_id = int(parts[2])
+                breed_id = int(parts[3])
+                
+                # Extraire le nom de la race (tout avant le dernier underscore + chiffre)
+                match = re.match(r'(.+)_\d+$', image_name)
+                if match:
+                    breed_name = match.group(1)
+                else:
+                    breed_name = image_name
+                
+                # Nom de l'espèce
+                species_name = 'Cat' if species_id == 1 else 'Dog'
+                
+                # Catégorie pour cohérence avec le code précédent (0=Chat, 1=Chien)
+                category = 0 if species_id == 1 else 1
+                
+                data.append({
+                    'filename': image_name + '.jpg',
+                    'breed': breed_name,
+                    'class_id': class_id,
+                    'species_id': species_id,
+                    'species_name': species_name,
+                    'category': str(category),
+                    'breed_id': breed_id
+                })
+        
+        return pd.DataFrame(data)
+
     def _load_and_split_data(self):
         """Méthode interne pour lire les fichiers .txt et séparer train/val"""
-        trainval_path = os.path.join(self.annotations_dir, 'trainval.txt')
-        test_path = os.path.join(self.annotations_dir, 'test.txt')
         
-        def parse_txt(path):
-            data = []
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"Fichier introuvable : {path}")
-            with open(path, 'r') as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if parts:
-                        data.append(parts[0] + '.jpg')
-            return pd.DataFrame(data, columns=['filename'])
+        if self.dataset_variant == 'original':
+            trainval_path = os.path.join(self.annotations_dir, 'trainval.txt')
+            test_path = os.path.join(self.annotations_dir, 'test.txt')
+            
+            def parse_txt(path):
+                data = []
+                if not os.path.exists(path):
+                    raise FileNotFoundError(f"Fichier introuvable : {path}")
+                with open(path, 'r') as f:
+                    for line in f:
+                        parts = line.strip().split()
+                        if parts:
+                            data.append(parts[0] + '.jpg')
+                return pd.DataFrame(data, columns=['filename'])
 
-        # Chargement selon le split demandé
-        if self.split == 'test':
-            return parse_txt(test_path)
-        else:
-            # On charge TOUT le trainval puis on coupe
-            full_train_df = parse_txt(trainval_path)
-            train_df, val_df = train_test_split(full_train_df, test_size=0.2, random_state=42)
+            # Chargement selon le split demandé
+            if self.split == 'test':
+                return parse_txt(test_path)
+            else:
+                # On charge TOUT le trainval puis on coupe
+                full_train_df = parse_txt(trainval_path)
+                train_df, val_df = train_test_split(full_train_df, test_size=0.2, random_state=42)
+                
+                if self.split == 'train':
+                    return train_df.reset_index(drop=True)
+                elif self.split == 'val':
+                    return val_df.reset_index(drop=True)
+        
+        elif self.dataset_variant == 'custom':
+            list_path = os.path.join(self.annotations_dir, 'list.txt')
+            full_df = self._parse_list_file(list_path)
+            
+            # Split 80% Train, 20% (Val + Test)
+            train_df, temp_df = train_test_split(full_df, test_size=0.2, random_state=42)
+            # Split 50% Val, 50% Test (soit 10% du total chacun)
+            val_df, test_df = train_test_split(temp_df, test_size=0.5, random_state=42)
             
             if self.split == 'train':
                 return train_df.reset_index(drop=True)
             elif self.split == 'val':
                 return val_df.reset_index(drop=True)
+            elif self.split == 'test':
+                return test_df.reset_index(drop=True)
+        else:
+            raise ValueError(f"dataset_variant inconnu : {self.dataset_variant}")
 
     def _filter_missing_xmls(self):
         """Supprime les images qui n'ont pas de XML correspondant"""
@@ -170,12 +242,12 @@ class OxfordPetDataset(Dataset):
         return img_tensor, mask_tensor
 
 # --- Fonction utilitaire pour créer les Dataloaders ---
-def get_oxford_loaders( root_dir, task='contours', batch_size=32):
+def get_oxford_loaders( root_dir, task='contours', batch_size=32, dataset_variant='custom'):
     """Crée les 3 dataloaders (Train, Val, Test) d'un coup"""
     
-    train_ds = OxfordPetDataset(root_dir, split='train', task=task)
-    val_ds = OxfordPetDataset(root_dir, split='val', task=task)
-    test_ds = OxfordPetDataset(root_dir, split='test', task=task)
+    train_ds = OxfordPetDataset(root_dir, split='train', task=task, dataset_variant=dataset_variant)
+    val_ds = OxfordPetDataset(root_dir, split='val', task=task, dataset_variant=dataset_variant)
+    test_ds = OxfordPetDataset(root_dir, split='test', task=task, dataset_variant=dataset_variant)
     
     loaders = {
         'train': DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2),
