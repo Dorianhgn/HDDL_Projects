@@ -7,12 +7,9 @@ class BasicConv2d(nn.Module):
         super(BasicConv2d,self).__init__()
         self.act_norm = act_norm
 
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels,out_channels,kernel_size, stride,padding=padding),
-            self.PixelShuffle(2)
-        )
+        self.conv = nn.Conv2d(in_channels,out_channels,kernel_size, stride,padding=padding)
         
-        self.norm = nn.GroupNorm(num_groups=8, num_channels=out_channels)
+        self.norm = nn.GroupNorm(2,out_channels)
         self.act = nn.SiLU(inplace=True) # SiLU = Swish for smooth activation function
 
     def forward(self, x):
@@ -33,7 +30,7 @@ class ConvSC(nn.Module):
         padding = (kernel_size - stride + 1) // 2
         self.conv = BasicConv2d(
             in_channels, out_channels, kernel_size=kernel_size, stride=stride,
-            padding=padding, upsampling=upsampling, act_norm=act_norm
+            padding=padding, act_norm=act_norm
         )
 
     def forward(self, x):
