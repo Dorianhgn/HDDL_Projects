@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument('--criterion', type=str, default='CrossEntropyLoss', help='Loss function: CrossEntropyLoss, BCEWithLogitsLoss, MSELoss')
     parser.add_argument('--model', type=str, default='models.unet.UNet', help='Dotted path to model class, e.g., models.unet.UNet')
     parser.add_argument('--model_args', type=dict, default=None, help='Model kwargs (when not using YAML)')
+    parser.add_argument('--data_args', type=dict, default=None, help='Dataloader kwargs (when not using YAML)')
     parser.add_argument('--path', type=str, default='models/unet_ns3/', help='Path to save models')
     parser.add_argument('--continue_training', action='store_true', help='Continue from last checkpoint')
     parser.add_argument('--data_path', type=str, default='data/oxford-iiit-pet', help='Path to dataset')
@@ -41,6 +42,14 @@ def parse_args():
                 if isinstance(item, dict):
                     merged.update(item)
             config['model_args'] = merged
+        
+        # Normalize data_args: allow dict or list-of-dicts
+        if 'data_args' in config and isinstance(config['data_args'], list):
+            merged = {}
+            for item in config['data_args']:
+                if isinstance(item, dict):
+                    merged.update(item)
+            config['data_args'] = merged
         
         # Override defaults with config file values
         for key, value in config.items():
@@ -117,7 +126,14 @@ def main():
     
     # Load data
     from dataloader_segmentation import get_oxford_loaders
-    loaders = get_oxford_loaders(args.data_path, task=args.task, batch_size=args.batch_size)
+    
+    # Prepare dataloader kwargs
+    data_kwargs = {'task': args.task, 'batch_size': args.batch_size}
+    if args.data_args is not None:
+        # Merge data_args from YAML/CLI
+        data_kwargs.update(args.data_args)
+    
+    loaders = get_oxford_loaders(args.data_path, **data_kwargs)
     
     # Initialize model (dynamic import from YAML/CLI)
     try:

@@ -1,0 +1,20 @@
+epochs: 50
+batch_size: 16
+lr: 0.001
+weight_decay: 0.0001
+task: "contours"
+criterion: "CrossEntropyLoss"
+data_path: data/oxford-iiit-pet
+path: models/contours/unet_ns3/
+model: models.unet.UNet
+model_args:
+  - n_s: 3
+  - n_classes: 3
+data_args:
+  - aug_percent: 0.5
+  - aug_rotation_limit: 30
+  - blur_radius: 2.0
+  - noise_level: 0.1
+  - train_test_split_ratio: 0.8
+  - dataset_variant: custom
+  - num_workers: 2

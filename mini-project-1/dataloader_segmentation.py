@@ -4,15 +4,18 @@ import torch
 import pandas as pd
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-from PIL import Image
+from PIL import Image, ImageFilter
 import xml.etree.ElementTree as ET
 from sklearn.model_selection import train_test_split
 import torchvision.transforms.functional as F
+import random
 
 class OxfordPetDataset(Dataset):
-    def __init__(self, root_dir, split='train', task='contours', target_size=(256, 256), dataset_variant='custom'):
+    def __init__(self, root_dir, split='train', task='contours', target_size=(256, 256), 
+                 dataset_variant='custom', aug_percent=0.0, aug_rotation_limit=30, 
+                 blur_radius=2.0, noise_level=0.1, sensitivity_type=None, train_test_split_ratio=0.8):
         """
-        Classe Dataset principale pour le projet.
+        Classe Dataset principale pour le projet avec Data Augmentation Additive.
         
         Args:
             root_dir (str): Chemin vers le dossier 'data/oxford-iiit-pet'
@@ -20,12 +23,25 @@ class OxfordPetDataset(Dataset):
             task (str): 'contours' (Segmentation masque) ou 'boxes' (Detection rectangle)
             target_size (tuple): Taille cible des images (H, W) ex: (256, 256)
             dataset_variant (str): 'original' (split officiel) ou 'custom' (split aléatoire complet)
+            aug_percent (float): Pourcentage de copies augmentées à ajouter (0.0 = pas d'augmentation, 1.0 = doubler)
+            aug_rotation_limit (int): Angle max de rotation (en degrés) pour l'augmentation random
+            blur_radius (float): Rayon max du flou gaussien
+            noise_level (float): Niveau max de bruit gaussien (écart-type)
+            sensitivity_type (str): Type de transformation forcée pour test de sensibilité 
+                                   ('flip', 'rotation', 'blur', 'noise', None)
+            train_test_split_ratio (float): Ratio de split train/test (défaut: 0.8 = 80% train, 20% val+test)
         """
         self.root_dir = root_dir
         self.split = split
         self.task = task
         self.target_size = target_size
         self.dataset_variant = dataset_variant
+        self.aug_percent = aug_percent if split == 'train' else 0.0
+        self.aug_rotation_limit = aug_rotation_limit
+        self.blur_radius = blur_radius
+        self.noise_level = noise_level
+        self.sensitivity_type = sensitivity_type if split == 'test' else None
+        self.train_test_split_ratio = train_test_split_ratio
         
         # Chemins des sous-dossiers
         self.images_dir = os.path.join(root_dir, 'images')
@@ -39,6 +55,17 @@ class OxfordPetDataset(Dataset):
         # 2. Filtrage si on fait la tâche 'boxes' (car certains XML manquent)
         if self.task in ['boxes', 'box']:
             self._filter_missing_xmls()
+        
+        # 3. Calcul du nombre d'échantillons originaux et augmentés
+        self.original_len = len(self.df)
+        self.augmented_len = int(self.original_len * self.aug_percent)
+        self.total_len = self.original_len + self.augmented_len
+        
+        if self.split == 'train' and self.aug_percent > 0:
+            print(f"[{self.split}] Data Augmentation: {self.original_len} originaux + {self.augmented_len} augmentés = {self.total_len} total")
+        
+        if self.split == 'test' and self.sensitivity_type:
+            print(f"[{self.split}] Test de sensibilité: transformation '{self.sensitivity_type}' appliquée à tout le dataset")
 
     def _parse_list_file(self, file_path):
         """
@@ -113,7 +140,8 @@ class OxfordPetDataset(Dataset):
             else:
                 # On charge TOUT le trainval puis on coupe
                 full_train_df = parse_txt(trainval_path)
-                train_df, val_df = train_test_split(full_train_df, test_size=0.2, random_state=42)
+                val_size = 1.0 - self.train_test_split_ratio
+                train_df, val_df = train_test_split(full_train_df, test_size=val_size, random_state=42)
                 
                 if self.split == 'train':
                     return train_df.reset_index(drop=True)
@@ -124,9 +152,10 @@ class OxfordPetDataset(Dataset):
             list_path = os.path.join(self.annotations_dir, 'list.txt')
             full_df = self._parse_list_file(list_path)
             
-            # Split 80% Train, 20% (Val + Test)
-            train_df, temp_df = train_test_split(full_df, test_size=0.2, random_state=42)
-            # Split 50% Val, 50% Test (soit 10% du total chacun)
+            # Split selon train_test_split_ratio (ex: 80% Train, 20% Val+Test)
+            temp_size = 1.0 - self.train_test_split_ratio
+            train_df, temp_df = train_test_split(full_df, test_size=temp_size, random_state=42)
+            # Split 50% Val, 50% Test du reste
             val_df, test_df = train_test_split(temp_df, test_size=0.5, random_state=42)
             
             if self.split == 'train':
@@ -194,11 +223,64 @@ class OxfordPetDataset(Dataset):
         return mask
 
     def __len__(self):
-        return len(self.df)
+        return self.total_len
+    
+    def _transform_image_mask(self, image, mask, transform_type=None):
+        """
+        Applique une transformation aléatoire (ou forcée) à l'image et au masque.
+        
+        Args:
+            image (PIL.Image): Image en RGB
+            mask (PIL.Image): Masque de segmentation
+            transform_type (str): Type de transformation forcée (None = random parmi les 4)
+        
+        Returns:
+            tuple: (image_transformée, masque_transformé)
+        """
+        # Si aucun type n'est spécifié, on choisit aléatoirement
+        if transform_type is None:
+            transform_type = random.choice(['flip', 'rotation', 'blur', 'noise'])
+        
+        if transform_type == 'flip':
+            # Flip Horizontal - appliqué à l'image ET au masque
+            image = F.hflip(image)
+            mask = F.hflip(mask)
+        
+        elif transform_type == 'rotation':
+            # Rotation aléatoire - appliquée à l'image ET au masque
+            angle = random.uniform(-self.aug_rotation_limit, self.aug_rotation_limit)
+            image = F.rotate(image, angle, interpolation=F.InterpolationMode.BILINEAR, fill=0)
+            mask = F.rotate(mask, angle, interpolation=F.InterpolationMode.NEAREST, fill=0)
+        
+        elif transform_type == 'blur':
+            # Flou Gaussien - appliqué UNIQUEMENT à l'image
+            radius = random.uniform(0.5, self.blur_radius)
+            image = image.filter(ImageFilter.GaussianBlur(radius=radius))
+            # Le masque reste inchangé
+        
+        elif transform_type == 'noise':
+            # Bruit Gaussien - appliqué UNIQUEMENT à l'image
+            # On doit d'abord convertir en array, ajouter le bruit, puis reconvertir
+            img_array = np.array(image).astype(np.float32) / 255.0
+            noise = np.random.normal(0, random.uniform(0, self.noise_level), img_array.shape)
+            img_array = np.clip(img_array + noise, 0, 1)
+            image = Image.fromarray((img_array * 255).astype(np.uint8))
+            # Le masque reste inchangé
+        
+        return image, mask
 
     def __getitem__(self, idx):
+        # Déterminer si c'est un échantillon original ou augmenté
+        is_augmented = idx >= self.original_len
+        
+        if is_augmented:
+            # Pour les copies augmentées, on revient à l'index original
+            actual_idx = idx - self.original_len
+        else:
+            actual_idx = idx
+        
         # 1. Récupérer le nom du fichier et les métadonnées
-        row = self.df.iloc[idx]
+        row = self.df.iloc[actual_idx]
         img_name = row['filename']
         img_path = os.path.join(self.images_dir, img_name)
         
@@ -211,15 +293,23 @@ class OxfordPetDataset(Dataset):
             mask_path = os.path.join(self.trimaps_dir, mask_name)
             mask = Image.open(mask_path) # Valeurs 1, 2, 3
         elif self.task in ['boxes', 'box']:
-            mask = self._get_box_mask(img_name, image.size) # A faire
+            mask = self._get_box_mask(img_name, image.size) # Valeurs 0, 1
         else:
-            raise ValueError(f"Tâche non définie : {self.task}")
+            raise ValueError(f"Tâche inconnue : {self.task}")
 
-        # 4. Transformation (Resize + Padding)
+        # 4. Appliquer la transformation si nécessaire
+        if is_augmented:
+            # Mode Train: transformation aléatoire pour les copies augmentées
+            image, mask = self._transform_image_mask(image, mask, transform_type=None)
+        elif self.sensitivity_type:
+            # Mode Test: transformation forcée pour tout le dataset
+            image, mask = self._transform_image_mask(image, mask, transform_type=self.sensitivity_type)
+
+        # 5. Transformation (Resize + Padding)
         image = self._resize_with_padding(image, is_mask=False)
         mask = self._resize_with_padding(mask, is_mask=True)
 
-        # 5. Conversion en Tenseurs PyTorch
+        # 6. Conversion en Tenseurs PyTorch
         img_tensor = F.to_tensor(image) # Devient [0, 1] float
         
         mask_array = np.array(mask)
@@ -242,16 +332,50 @@ class OxfordPetDataset(Dataset):
         return img_tensor, mask_tensor
 
 # --- Fonction utilitaire pour créer les Dataloaders ---
-def get_oxford_loaders( root_dir, task='contours', batch_size=32, dataset_variant='custom'):
-    """Crée les 3 dataloaders (Train, Val, Test) d'un coup"""
+def get_oxford_loaders(root_dir, task='contours', batch_size=32, dataset_variant='custom',
+                       aug_percent=0.0, aug_rotation_limit=0, blur_radius=0.0, noise_level=0.0,
+                       sensitivity_type=None, train_test_split_ratio=0.8, num_workers=2):
+    """
+    Crée les 3 dataloaders (Train, Val, Test) d'un coup avec options d'augmentation.
     
-    train_ds = OxfordPetDataset(root_dir, split='train', task=task, dataset_variant=dataset_variant)
-    val_ds = OxfordPetDataset(root_dir, split='val', task=task, dataset_variant=dataset_variant)
-    test_ds = OxfordPetDataset(root_dir, split='test', task=task, dataset_variant=dataset_variant)
+    Args:
+        root_dir (str): Chemin vers le dossier 'data/oxford-iiit-pet'
+        task (str): 'contours' ou 'boxes'
+        batch_size (int): Taille des batchs
+        dataset_variant (str): 'original' ou 'custom'
+        aug_percent (float): Pourcentage d'augmentation additive (0.0 à 1.0+)
+        aug_rotation_limit (int): Angle max de rotation pour augmentation
+        blur_radius (float): Rayon max de flou gaussien
+        noise_level (float): Niveau max de bruit gaussien
+        sensitivity_type (str): Type de transformation pour test de sensibilité (None, 'flip', 'rotation', 'blur', 'noise')
+        train_test_split_ratio (float): Ratio de split train/test (défaut: 0.8 = 80% train, 20% val+test)
+    
+    Returns:
+        dict: Dictionnaire avec les clés 'train', 'val', 'test'
+    """
+    
+    train_ds = OxfordPetDataset(
+        root_dir, split='train', task=task, dataset_variant=dataset_variant,
+        aug_percent=aug_percent, aug_rotation_limit=aug_rotation_limit,
+        blur_radius=blur_radius, noise_level=noise_level,
+        train_test_split_ratio=train_test_split_ratio
+    )
+    
+    val_ds = OxfordPetDataset(
+        root_dir, split='val', task=task, dataset_variant=dataset_variant,
+        train_test_split_ratio=train_test_split_ratio
+    )
+    
+    test_ds = OxfordPetDataset(
+        root_dir, split='test', task=task, dataset_variant=dataset_variant,
+        blur_radius=blur_radius, noise_level=noise_level, 
+        sensitivity_type=sensitivity_type,
+        train_test_split_ratio=train_test_split_ratio
+    )
     
     loaders = {
-        'train': DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2),
-        'val': DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2),
-        'test': DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
+        'train': DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers),
+        'val': DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers),
+        'test': DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     }
     return loaders
