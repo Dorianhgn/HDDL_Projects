@@ -1,5 +1,9 @@
 # Projets Chats ou Chiens ?
 
+## Training Tuto
+
+
+
 ## Structure
 
 * On doit créer chacun des fichiers .py pour nos modèles.

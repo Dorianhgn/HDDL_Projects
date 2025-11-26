@@ -37,7 +37,7 @@ class OxfordPetDataset(Dataset):
         self.df = self._load_and_split_data()
         
         # 2. Filtrage si on fait la tâche 'boxes' (car certains XML manquent)
-        if self.task == 'boxes':
+        if self.task in ['boxes', 'box']:
             self._filter_missing_xmls()
 
     def _parse_list_file(self, file_path):
@@ -210,8 +210,10 @@ class OxfordPetDataset(Dataset):
             mask_name = img_name.replace('.jpg', '.png')
             mask_path = os.path.join(self.trimaps_dir, mask_name)
             mask = Image.open(mask_path) # Valeurs 1, 2, 3
-        else: # boxes
-            mask = self._get_box_mask(img_name, image.size) # Valeurs 0, 1
+        elif self.task in ['boxes', 'box']:
+            mask = self._get_box_mask(img_name, image.size) # A faire
+        else:
+            raise ValueError(f"Tâche non définie : {self.task}")
 
         # 4. Transformation (Resize + Padding)
         image = self._resize_with_padding(image, is_mask=False)
@@ -223,31 +225,21 @@ class OxfordPetDataset(Dataset):
         mask_array = np.array(mask)
         mask_tensor = torch.from_numpy(mask_array).long() # Devient Entier
         
-        # Correction des valeurs pour 'contours' (1,2,3 -> 0,1,2)
-        if self.task == 'contours':
-            # On décale les valeurs > 0 de 1 vers le bas
-            # Le padding (0) reste 0. 
-            # Attention : ici le padding (0) se mélange avec la classe 1 qui devient 0.
-            # Pour faire simple : On dit que Padding (0) = Fond.
+        # Correction des valeurs pour trimaps (1,2,3 -> 0,1,2)
+        # S'applique pour 'contours', 'classification', et toute tâche utilisant trimaps
+        if self.task not in ['boxes', 'box']:
             # Trimap : 1=Animal, 2=Fond, 3=Bord
             # Cible : 0=Fond, 1=Animal, 2=Bord
+            # Le padding (0) reste 0 (Fond)
             
             # Mapping manuel pour être sûr
             new_mask = torch.zeros_like(mask_tensor)
             new_mask[mask_tensor == 1] = 1 # Animal
             new_mask[mask_tensor == 2] = 0 # Fond
             new_mask[mask_tensor == 3] = 2 # Bord
-            # Le padding était 0, il reste 0 (Fond) -> C'est cohérent !
             mask_tensor = new_mask
 
-        # 6. Récupérer les métadonnées (breed, species) si disponibles
-        metadata = {}
-        if 'breed' in row:
-            metadata['breed'] = row['breed']
-        if 'species_name' in row:
-            metadata['species'] = row['species_name']
-        
-        return img_tensor, mask_tensor, metadata
+        return img_tensor, mask_tensor
 
 # --- Fonction utilitaire pour créer les Dataloaders ---
 def get_oxford_loaders( root_dir, task='contours', batch_size=32, dataset_variant='custom'):
