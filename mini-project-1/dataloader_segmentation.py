@@ -110,7 +110,7 @@ class OxfordPetDataset(Dataset):
                     'class_id': class_id,
                     'species_id': species_id,
                     'species_name': species_name,
-                    'category': str(category),
+                    'category': category,
                     'breed_id': breed_id
                 })
         
@@ -294,6 +294,28 @@ class OxfordPetDataset(Dataset):
             mask = Image.open(mask_path) # Valeurs 1, 2, 3
         elif self.task in ['boxes', 'box']:
             mask = self._get_box_mask(img_name, image.size) # Valeurs 0, 1
+        elif self.task in ['classification_fine']:
+            # Pour classification ou autre tâche sans masque, on utilise les trimaps par défaut
+            mask_name = img_name.replace('.jpg', '.png')
+            mask_path = os.path.join(self.trimaps_dir, mask_name)
+            mask = Image.open(mask_path) # Valeurs 1, 2, 3
+
+            # breed_id: Cats 1-25, Dogs 1-12 -> label: 0-36 (25 cats + 12 dogs)
+            breed_id = self.df.iloc[actual_idx]['breed_id']
+            category = self.df.iloc[actual_idx]['category']  # 0=Cat, 1=Dog
+            if category == 0:  # Cat
+                label = breed_id - 1  # 1-12 -> 0-11
+            else:  # Dog
+                label = 12 + breed_id - 1  # 1-25 -> 12-36
+            label_tensor = torch.tensor(label).long()
+        elif self.task in ['classification']:
+            # Pour classification ou autre tâche sans masque, on utilise les trimaps par défaut
+            mask_name = img_name.replace('.jpg', '.png')
+            mask_path = os.path.join(self.trimaps_dir, mask_name)
+            mask = Image.open(mask_path) # Valeurs 1, 2, 3
+
+            label = self.df.iloc[actual_idx]['category']
+            label_tensor = torch.tensor(label).long()
         else:
             raise ValueError(f"Tâche inconnue : {self.task}")
 
@@ -329,7 +351,10 @@ class OxfordPetDataset(Dataset):
             new_mask[mask_tensor == 3] = 2 # Bord
             mask_tensor = new_mask
 
-        return img_tensor, mask_tensor
+        if self.task in ['classification_fine', 'classification']:
+            return img_tensor, label_tensor
+        else:
+            return img_tensor, mask_tensor
 
 # --- Fonction utilitaire pour créer les Dataloaders ---
 def get_oxford_loaders(root_dir, task='contours', batch_size=32, dataset_variant='custom',
