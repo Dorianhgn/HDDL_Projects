@@ -3,19 +3,47 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class BasicConv2d(nn.Module):
-    def __init__(self,in_channels,out_channels,kernel_size,stride=1,padding=1):
+    def __init__(self,in_channels,out_channels,kernel_size=3,stride=1,padding=0, act_norm=False):
         super(BasicConv2d,self).__init__()
-        self.conv = nn.Sequential(nn.Conv2d(in_channels,out_channels,kernel_size, stride,padding=padding),
-                                  nn.BatchNorm2d(out_channels),
-                                    nn.ReLU(inplace=True))
+        self.act_norm = act_norm
+
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels,out_channels,kernel_size, stride,padding=padding),
+            self.PixelShuffle(2)
+        )
+        
+        self.norm = nn.GroupNorm(num_groups=8, num_channels=out_channels)
+        self.act = nn.SiLU(inplace=True) # SiLU = Swish for smooth activation function
+
+    def forward(self, x):
+        y = self.conv(x)
+        if self.act_norm:
+            y = self.norm(y)
+            y = self.act(y)
+        return y
+
+class ConvSC(nn.Module):
+    """
+    Spacial-Convolution block that forms the backbone of the Encoder and Decoder.
+    This is essentially a wrapper around BasicConv2d to handle stride and padding automatically.
+    """
+    def __init__(self, in_channels, out_channels, kernel_size=3, downsampling=False, upsampling=False, act_norm=True):
+        super().__init__()
+        stride = 2 if downsampling else 1
+        padding = (kernel_size - stride + 1) // 2
+        self.conv = BasicConv2d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride,
+            padding=padding, upsampling=upsampling, act_norm=act_norm
+        )
+
     def forward(self, x):
         return self.conv(x)
 class DoubleConv(nn.Module):
     def __init__(self,in_channels,out_channels,kernel_size=3,stride=1):
         super(DoubleConv,self).__init__()
         self.double_conv = nn.Sequential(
-            BasicConv2d(in_channels,out_channels,kernel_size,stride=stride,padding=1), #stride =2 dans encoder pour réduire la taille
-            BasicConv2d(out_channels,out_channels,kernel_size,stride=1,padding=1) #stride=1 toujours pour affiner les features
+            BasicConv2d(in_channels,out_channels,kernel_size,stride=stride,padding=1, act_norm=True), #stride =2 dans encoder pour réduire la taille
+            BasicConv2d(out_channels,out_channels,kernel_size,stride=1,padding=1, act_norm=True) #stride=1 toujours pour affiner les features
         )
 
     def forward(self, x):
