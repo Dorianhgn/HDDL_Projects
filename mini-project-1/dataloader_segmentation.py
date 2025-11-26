@@ -197,8 +197,9 @@ class OxfordPetDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-        # 1. Récupérer le nom du fichier
-        img_name = self.df.iloc[idx]['filename']
+        # 1. Récupérer le nom du fichier et les métadonnées
+        row = self.df.iloc[idx]
+        img_name = row['filename']
         img_path = os.path.join(self.images_dir, img_name)
         
         # 2. Charger l'image
@@ -239,7 +240,14 @@ class OxfordPetDataset(Dataset):
             # Le padding était 0, il reste 0 (Fond) -> C'est cohérent !
             mask_tensor = new_mask
 
-        return img_tensor, mask_tensor
+        # 6. Récupérer les métadonnées (breed, species) si disponibles
+        metadata = {}
+        if 'breed' in row:
+            metadata['breed'] = row['breed']
+        if 'species_name' in row:
+            metadata['species'] = row['species_name']
+        
+        return img_tensor, mask_tensor, metadata
 
 # --- Fonction utilitaire pour créer les Dataloaders ---
 def get_oxford_loaders( root_dir, task='contours', batch_size=32, dataset_variant='custom'):
