@@ -270,94 +270,102 @@ class OxfordPetDataset(Dataset):
         return image, mask
 
     def __getitem__(self, idx):
+        """
+        Récupère un élément du dataset selon l'index.
+        
+        Args:
+            idx (int): Index de l'élément à récupérer
+            
+        Returns:
+            tuple: (image_tensor, target) où target dépend de la tâche:
+                - contours: mask_tensor (segmentation trimap)
+                - boxes: bbox_tensor [xmin, ymin, xmax, ymax]
+                - classification: label (0=Cat, 1=Dog)
+                - classification_fine: label (0-36 pour les 37 races)
+        """
         # Déterminer si c'est un échantillon original ou augmenté
         is_augmented = idx >= self.original_len
+        actual_idx = idx - self.original_len if is_augmented else idx
         
-        if is_augmented:
-            # Pour les copies augmentées, on revient à l'index original
-            actual_idx = idx - self.original_len
-        else:
-            actual_idx = idx
-        
-        # 1. Récupérer le nom du fichier et les métadonnées
+        # ========== 1. CHARGEMENT DES DONNÉES ==========
         row = self.df.iloc[actual_idx]
         img_name = row['filename']
         img_path = os.path.join(self.images_dir, img_name)
-        
-        # 2. Charger l'image
         image = Image.open(img_path).convert('RGB')
         
-        # 3. Charger le Masque (Target) selon la tâche
+        # ========== 2. CHARGEMENT DE LA TARGET SELON LA TÂCHE ==========
         if self.task == 'contours':
-            mask_name = img_name.replace('.jpg', '.png')
-            mask_path = os.path.join(self.trimaps_dir, mask_name)
-            mask = Image.open(mask_path) # Valeurs 1, 2, 3
+            # Segmentation: charger le masque trimap
+            mask_path = os.path.join(self.trimaps_dir, img_name.replace('.jpg', '.png'))
+            mask = Image.open(mask_path)
+            
         elif self.task in ['boxes', 'box']:
-            mask = self._get_box_mask(img_name, image.size) # Valeurs 0, 1
-        elif self.task in ['classification_fine']:
-            # Pour classification ou autre tâche sans masque, on utilise les trimaps par défaut
-            mask_name = img_name.replace('.jpg', '.png')
-            mask_path = os.path.join(self.trimaps_dir, mask_name)
-            mask = Image.open(mask_path) # Valeurs 1, 2, 3
-
-            # breed_id: Cats 1-25, Dogs 1-12 -> label: 0-36 (25 cats + 12 dogs)
-            breed_id = self.df.iloc[actual_idx]['breed_id']
-            category = self.df.iloc[actual_idx]['category']  # 0=Cat, 1=Dog
-            if category == 0:  # Cat
-                label = breed_id - 1  # 1-12 -> 0-11
-            else:  # Dog
-                label = 12 + breed_id - 1  # 1-25 -> 12-36
-            label_tensor = torch.tensor(label).long()
-        elif self.task in ['classification']:
-            # Pour classification ou autre tâche sans masque, on utilise les trimaps par défaut
-            mask_name = img_name.replace('.jpg', '.png')
-            mask_path = os.path.join(self.trimaps_dir, mask_name)
-            mask = Image.open(mask_path) # Valeurs 1, 2, 3
-
-            label = self.df.iloc[actual_idx]['category']
-            label_tensor = torch.tensor(label).long()
+            # Détection: extraire les coordonnées de bounding box du XML
+            xml_path = os.path.join(self.xmls_dir, img_name.replace('.jpg', '.xml'))
+            tree = ET.parse(xml_path)
+            bndbox = tree.getroot().find('object').find('bndbox')
+            
+            bbox_coords = [
+                int(bndbox.find('xmin').text),
+                int(bndbox.find('ymin').text),
+                int(bndbox.find('xmax').text),
+                int(bndbox.find('ymax').text)
+            ]
+            mask = Image.new('L', image.size, 0)  # Masque dummy pour transformations
+            
+        elif self.task == 'classification_fine':
+            # Classification fine-grained: 37 races (25 chats + 12 chiens)
+            mask_path = os.path.join(self.trimaps_dir, img_name.replace('.jpg', '.png'))
+            mask = Image.open(mask_path)
+            
+            breed_id = row['breed_id']
+            category = row['category']  # 0=Cat, 1=Dog
+            label = breed_id - 1 if category == 0 else 12 + breed_id - 1
+            
+        elif self.task == 'classification':
+            # Classification binaire: Chat vs Chien
+            mask_path = os.path.join(self.trimaps_dir, img_name.replace('.jpg', '.png'))
+            mask = Image.open(mask_path)
+            label = row['category']
+            
         else:
             raise ValueError(f"Tâche inconnue : {self.task}")
-
-        # 4. Appliquer la transformation si nécessaire
+        
+        # ========== 3. DATA AUGMENTATION ==========
         if is_augmented:
-            # Mode Train: transformation aléatoire pour les copies augmentées
             image, mask = self._transform_image_mask(image, mask, transform_type=None)
         elif self.sensitivity_type:
-            # Mode Test: transformation forcée pour tout le dataset
             image, mask = self._transform_image_mask(image, mask, transform_type=self.sensitivity_type)
-
-        # 5. Transformation (Resize + Padding)
+        
+        # ========== 4. RESIZE + PADDING ==========
         image = self._resize_with_padding(image, is_mask=False)
         mask = self._resize_with_padding(mask, is_mask=True)
-
-        # 6. Conversion en Tenseurs PyTorch
-        img_tensor = F.to_tensor(image) # Devient [0, 1] float
         
-        mask_array = np.array(mask)
-        mask_tensor = torch.from_numpy(mask_array).long() # Devient Entier
+        # ========== 5. CONVERSION EN TENSEURS ==========
+        img_tensor = F.to_tensor(image)
         
-        # Correction des valeurs pour trimaps (1,2,3 -> 0,1,2)
-        # S'applique pour 'contours', 'classification', et toute tâche utilisant trimaps
-        if self.task not in ['boxes', 'box']:
-            # Trimap : 1=Animal, 2=Fond, 3=Bord
-            # Cible : 0=Fond, 1=Animal, 2=Bord
-            # Le padding (0) reste 0 (Fond)
-            
-            # Mapping manuel pour être sûr
-            new_mask = torch.zeros_like(mask_tensor)
-            new_mask[mask_tensor == 1] = 1 # Animal
-            new_mask[mask_tensor == 2] = 0 # Fond
-            new_mask[mask_tensor == 3] = 2 # Bord
-            mask_tensor = new_mask
-
         if self.task in ['classification_fine', 'classification']:
-            return img_tensor, label_tensor
-        else:
-            return img_tensor, mask_tensor
+            # Retourner directement le label
+            return img_tensor, torch.tensor(label, dtype=torch.long)
+        
+        elif self.task in ['boxes', 'box']:
+            # Retourner les coordonnées de bounding box
+            return img_tensor, torch.tensor(bbox_coords, dtype=torch.float32)
+        
+        else:  # task == 'contours'
+            # Convertir et remapper le masque trimap
+            mask_tensor = torch.from_numpy(np.array(mask)).long()
+            
+            # Remapping: 1=Animal->1, 2=Fond->0, 3=Bord->2
+            remapped_mask = torch.zeros_like(mask_tensor)
+            remapped_mask[mask_tensor == 1] = 1
+            remapped_mask[mask_tensor == 2] = 0
+            remapped_mask[mask_tensor == 3] = 2
+            
+            return img_tensor, remapped_mask
 
 # --- Fonction utilitaire pour créer les Dataloaders ---
-def get_oxford_loaders(root_dir, task='contours', batch_size=32, dataset_variant='custom',
+def get_oxford_loaders(root_dir, task='contours', batch_size=24, dataset_variant='custom',
                        aug_percent=0.0, aug_rotation_limit=0, blur_radius=0.0, noise_level=0.0,
                        sensitivity_type=None, train_test_split_ratio=0.8, num_workers=2):
     """

@@ -120,6 +120,15 @@ def main():
     
     # Save config to path
     config_save_path = os.path.join(args.path, "config.yaml")
+
+    # Check if config exists, and ask before overwriting
+    if os.path.exists(config_save_path):
+        print(f"⚠️ Le fichier de configuration existe déjà à : {config_save_path}. Un modèle pourrait déjà y être entraîné.")
+        response = input("Voulez-vous l'écraser ? (y/n) : ")
+        if response not in ['o', 'oui', 'y', 'yes']:
+            print("Abandon de la sauvegarde de la configuration. Fin du programme.")
+            return
+        
     with open(config_save_path, 'w') as f:
         yaml.dump(vars(args), f, default_flow_style=False)
     print(f"📝 Configuration sauvegardée dans : {config_save_path}")
