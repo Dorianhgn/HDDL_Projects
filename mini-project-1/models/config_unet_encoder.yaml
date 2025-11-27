@@ -1,0 +1,27 @@
+# Option 1: UNet Encoder + Regression Head
+# Using pre-trained UNet weights from segmentation task
+
+model: models.classification_models.UNetEncoderRegressor
+model_args:
+  pretrained_path: models/unet_ns3/best.pth  # Path to your trained UNet
+  C_in: 3
+  C_hid: 64
+  n_s: 3
+  num_outputs: 4
+
+task: box
+criterion: MSELoss
+epochs: 30
+batch_size: 32
+lr: 0.001
+weight_decay: 0.0001
+
+data_path: data/oxford-iiit-pet
+
+data_args:
+  - aug_percent: 0.5
+  - train_test_split_ratio: 0.8
+  - dataset_variant: custom
+  - num_workers: 3
+
+path: models/temp_results/boxes/unet_encoder_box/

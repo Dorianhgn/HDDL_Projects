@@ -1,0 +1,25 @@
+# Option 2a: VGG16 + Head Only Training
+# Only the regression head is trained, backbone frozen
+
+model: models.classification_models.VGGRegressor
+model_args:
+  freeze_strategy: head_only
+  pretrained: true
+  num_outputs: 4
+
+task: box
+criterion: MSELoss
+epochs: 30
+batch_size: 32
+lr: 0.001
+weight_decay: 0.0001
+
+data_path: data/oxford-iiit-pet
+
+data_args:
+  - aug_percent: 0.5
+  - train_test_split_ratio: 0.8
+  - dataset_variant: custom
+  - num_workers: 3
+
+path: models/temp_results/boxes/vgg_head_only/
