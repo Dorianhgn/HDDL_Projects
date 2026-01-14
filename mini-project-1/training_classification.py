@@ -4,6 +4,7 @@ import torch.optim as optim
 from tqdm import tqdm 
 import os
 from models.unet import UNet
+from models.losses import DiceLoss, CombinedLoss, FocalLoss
 import numpy as np
 import argparse
 import yaml
@@ -121,8 +122,8 @@ def main():
     # Save config to path
     config_save_path = os.path.join(args.path, "config.yaml")
 
-    # Check if config exists, and ask before overwriting
-    if os.path.exists(config_save_path):
+    # Check if config exists, and ask before overwriting, if continue_training is not set
+    if os.path.exists(config_save_path) and not getattr(args, 'continue_training', False):
         print(f"⚠️ Le fichier de configuration existe déjà à : {config_save_path}. Un modèle pourrait déjà y être entraîné.")
         response = input("Voulez-vous l'écraser ? (y/n) : ")
         if response not in ['o', 'oui', 'y', 'yes']:
@@ -161,10 +162,16 @@ def main():
     model = ModelClass(**model_kwargs).to(device)
 
     # Choose criterion (parameterizable)
+    # Récupérer n_classes pour les losses qui en ont besoin
+    n_classes = model_kwargs.get('n_classes', 3)
+    
     criterion_map = {
         'CrossEntropyLoss': nn.CrossEntropyLoss(),
         'BCEWithLogitsLoss': nn.BCEWithLogitsLoss(),
         'MSELoss': nn.MSELoss(),
+        'DiceLoss': DiceLoss(n_classes=n_classes),
+        'CombinedLoss': CombinedLoss(n_classes=n_classes, ce_weight=0.5, dice_weight=0.5),
+        'FocalLoss': FocalLoss(alpha=1.0, gamma=2.0),
     }
     criterion_name = args.criterion if hasattr(args, 'criterion') else 'CrossEntropyLoss'
     if criterion_name not in criterion_map:

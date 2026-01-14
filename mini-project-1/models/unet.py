@@ -158,3 +158,107 @@ class UNet(nn.Module):
         output = self.decoder(x_final, skips)
         
         return output
+    
+class attention_gate(nn.Module): 
+    """
+    cette classe implemente un gate d'attention pour le unet attention
+    """
+    def __init__(self, F_g, F_l, F_int):
+        super(attention_gate,self).__init__()
+        """
+        Args: F_g : nombre de canaux du tenseur de gating (venant du décodeur)
+              F_l : nombre de canaux du tenseur de skip connection (venant de l'encodeur)
+              F_int : nombre de canaux intermédiaires pour le calcul de l'attention
+
+        """
+        # W_g et W_x sont des convolutions 1x1 pour réduire le nombre de canaux 
+        # psi est une convolution 1x1 suivie d'une sigmoid pour calculer la carte d'attention
+        self.W_g = nn.Sequential(
+            nn.Conv2d(F_g, F_int, kernel_size=1, stride=1, padding=0, bias=True),
+            nn.GroupNorm(2, F_int) # c le batchnorm pour les petits batchs
+        )
+        
+
+        self.W_x = nn.Sequential(
+            nn.Conv2d(F_l, F_int, kernel_size=1, stride=1, padding=0, bias=True),
+            nn.GroupNorm(2, F_int)
+        )
+
+        self.psi = nn.Sequential(
+            nn.Conv2d(F_int, 1, kernel_size=1, stride=1, padding=0, bias=True),
+            nn.BatchNorm2d(1),  # 1 seul canal, on utilise BatchNorm au lieu de GroupNorm
+            nn.Sigmoid()  # activation pour obtenir des valeurs entre 0 et 1
+        )
+
+        self.relu = nn.SiLU(inplace=True) # SILU active les zones importantes
+
+    def forward(self, g, x):
+        g1 = self.W_g(g)
+        x1 = self.W_x(x)
+        psi = self.relu(g1 + x1)
+        psi = self.psi(psi)
+        return x * psi  # appliquer la carte d'attention au skip connection 
+    
+
+class AttentionDecoder(nn.Module):
+    def __init__(self, C_hid_enc, n_classes, n_s):
+        super().__init__()
+        
+        self.dec = nn.ModuleList()  # liste pour stocker les couches du décodeur
+        
+        c_curr = C_hid_enc   
+        
+        for _ in range(n_s - 1): 
+            filters = c_curr // 2 # nombre de filres voulus  
+            self.dec.append(
+                nn.ModuleDict({
+                    'up': nn.ConvTranspose2d(c_curr, filters, kernel_size=2, stride=2),
+                    'attn': attention_gate(F_g=filters, F_l=filters, F_int=filters // 2),
+                    'conv': DoubleConv(c_curr, filters, stride=1) 
+                })
+            )
+            c_curr //= 2
+            
+        self.final_conv = DoubleConv(c_curr, c_curr, stride=1)
+        self.readout = nn.Conv2d(c_curr, n_classes, kernel_size=1)
+
+    def forward(self, hid, skips):
+
+        skips = skips[:-1][::-1]   #on inverse pour remonter 
+
+        for i, layer in enumerate(self.dec):
+  
+            g = layer['up'](hid)  
+            
+            x = skips[i] 
+            
+            if g.shape != x.shape:
+                g = F.interpolate(g, size=x.shape[2:], mode='bilinear', align_corners=True)
+            
+            x_att = layer['attn'](g, x) # x_att ne contient que les parties importantes du skip connection 
+            
+            hid = torch.cat([x_att, g], dim=1) 
+            
+            hid = layer['conv'](hid) 
+            
+       # A cette etape on a fini les étapes d'up-sampling
+        hid = self.final_conv(hid) 
+        y = self.readout(hid)   
+        
+        return y
+
+class AttentionUNet(nn.Module):
+    def __init__(self, n_classes, n_s=4, C_in=3, C_hid=64):
+        super().__init__()
+        self.encoder = Encoder(C_in, C_hid, n_s)
+        
+        C_bottom = self.encoder.final_channels
+        
+        self.decoder = AttentionDecoder(C_bottom, n_classes, n_s)
+
+    def forward(self, x):
+        x_final, skips = self.encoder(x)
+        
+        output = self.decoder(x_final, skips)
+        
+        return output
