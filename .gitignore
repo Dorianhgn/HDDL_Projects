@@ -188,5 +188,8 @@ temp_results/
 
 *.tar.gz
 *.zip
+data*/
+*.pth
+*.ckpt
 
 mini-project-3/step4/checkpoints/
