@@ -77,10 +77,11 @@ def train(args):
     model = get_model(args.model, num_classes=8).to(device)
     
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     # --- 4. Training Loop ---
     best_val_loss = float('inf')
+    best_val_acc = 0.0
     history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
 
     for epoch in range(1, args.epochs + 1):
@@ -126,18 +127,23 @@ def train(args):
         
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), os.path.join(exp_dir, "best_model.pth"))
-            print(" -> New Best Model Saved!")
+            torch.save(model.state_dict(), os.path.join(exp_dir, "best_model_loss.pth"))
+            print(" -> New Best Model Saved! (Loss)")
+        if avg_val_acc > best_val_acc:
+            best_val_acc = avg_train_acc
+            torch.save(model.state_dict(), os.path.join(exp_dir, "best_model_acc.pth"))
+            print(" -> New Best Model Saved! (Accuracy)")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp_name", type=str, required=True, help="Folder name for outputs")
-    parser.add_argument("--task", type=int, required=True, choices=[1, 2], help="1=Cylinders, 2=Sphere")
+    parser.add_argument("--task", type=int, required=True, choices=[1, 2, 3, 4], help="1=Cylinders, 2=Sphere")
     parser.add_argument("--model", type=str, required=True, choices=['resnet50', 'vit_b_16'])
     parser.add_argument("--img_dir", type=str, default="data_clevr/CLEVR_v1.0/images/train")
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--weight_decay", type=float, default=0.01)
     
     args = parser.parse_args()
     train(args)

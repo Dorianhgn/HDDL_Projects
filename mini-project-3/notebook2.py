@@ -1,23 +1,9 @@
-# ---
-# jupyter:
-#   jupytext:
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#       jupytext_version: 1.16.2
-#   kernelspec:
-#     display_name: Python 3 (ipykernel)
-#     language: python
-#     name: python3
-# ---
-
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
 
 # %% [markdown]
-# # Task 1 or 2
+# # Task i
 
 # %% [markdown]
 # ## Display examples
@@ -26,7 +12,7 @@ import matplotlib.pyplot as plt
 from step2.dataloader import CLEVR_ReasoningDataset
 from torchvision import transforms
 
-TASK = 2
+TASK = 4
 IDX_IMG = 5  # Choisir l'index de l'image à analyser
 
 # 1. Définir les transformations (Vital pour ViT : resize 224x224 + Norm ImageNet)
@@ -46,6 +32,18 @@ elif TASK == 2: # La couleur de l'objet le plus loing de la sphère grise
     # 2. Instancier le Dataset pour la Tâche 2 (Sphère Grise)
     test_dataset = CLEVR_ReasoningDataset(
         json_file="step2/task2_val.json",
+        img_root_dir="step2/data_clevr/CLEVR_v1.0/images/val",
+        transform=transform
+    )
+elif TASK == 3:
+    test_dataset = CLEVR_ReasoningDataset(
+        json_file="step2/task3_val.json",
+        img_root_dir="step2/data_clevr/CLEVR_v1.0/images/val",
+        transform=transform
+    )
+elif TASK == 4:
+    test_dataset = CLEVR_ReasoningDataset(
+        json_file="step2/task4_val.json",
         img_root_dir="step2/data_clevr/CLEVR_v1.0/images/val",
         transform=transform
     )
@@ -95,17 +93,14 @@ if TASK == 1:
 elif TASK == 2: 
     METRICS_VIT_PATH = "step2/experiments/ViT_task2_bis/metrics.npy"
     METRICS_RESNET_PATH = "step2/experiments/ResNet_task2/metrics.npy"
+elif TASK == 3:
+    METRICS_VIT_PATH = "step2/experiments/ViT_task3_wd/metrics.npy"
+    METRICS_RESNET_PATH = "step2/experiments/ResNet_task3_wd/metrics.npy"
+elif TASK == 4:
+    METRICS_VIT_PATH = "step2/experiments/ViT_task4_wd/metrics.npy"
+    METRICS_RESNET_PATH = "step2/experiments/ResNet_task4_wd/metrics.npy"
 
 # %%
-# logging in train was:
-
-        # # Logging
-        # history['train_loss'].append(avg_train_loss)
-        # history['train_acc'].append(avg_train_acc)
-        # history['val_loss'].append(avg_val_loss)
-        # history['val_acc'].append(avg_val_acc)
-        # np.save(os.path.join(exp_dir, "metrics.npy"), history)
-
 metrics_vit = np.load(METRICS_VIT_PATH, allow_pickle=True).item()
 metrics_resnet = np.load(METRICS_RESNET_PATH, allow_pickle=True).item()
 
@@ -145,7 +140,7 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# # !pip install captum > /dev/null
+# !pip install captum > /dev/null
 
 # %%
 import torch
@@ -160,7 +155,7 @@ try:
     from captum.attr import visualization as viz
 except ImportError:
     import sys
-    # !{sys.executable} -m pip install captum
+    !{sys.executable} -m pip install captum
 
     from captum.attr import LayerGradCam, Occlusion, IntegratedGradients
     from captum.attr import visualization as viz
@@ -173,11 +168,17 @@ from step2.dataloader import CLEVR_ReasoningDataset
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if TASK == 1:
-    CKPT_RESNET = "step2/experiments/ResNet_task1/best_model.pth" # Mets tes chemins réels
-    CKPT_VIT = "step2/experiments/ViT_task1/best_model.pth"       # Mets tes chemins réels
+    CKPT_RESNET = "step2/experiments/ResNet_task1/best_model.pth"
+    CKPT_VIT = "step2/experiments/ViT_task1/best_model.pth"
 elif TASK == 2:
-    CKPT_RESNET = "step2/experiments/ResNet_task2/best_model.pth" # Mets tes chemins réels
-    CKPT_VIT = "step2/experiments/ViT_task2_bis/best_model.pth"       # Mets tes chemins réels
+    CKPT_RESNET = "step2/experiments/ResNet_task2/best_model.pth"
+    CKPT_VIT = "step2/experiments/ViT_task2_bis/best_model.pth"
+elif TASK == 3:
+    CKPT_RESNET = "step2/experiments/ResNet_task3_wd/best_model.pth"
+    CKPT_VIT = "step2/experiments/ViT_task3_wd/best_model.pth"
+elif TASK == 4:
+    CKPT_RESNET = "step2/experiments/ResNet_task4_wd/best_model_acc.pth"
+    CKPT_VIT = "step2/experiments/ViT_task4_wd/best_model_acc.pth"
 
 # Transformations (Identiques au training)
 transform = transforms.Compose([
@@ -224,6 +225,12 @@ import torch
 import numpy as np
 from captum.attr import LayerGradCam, IntegratedGradients
 from captum.attr import visualization as viz
+
+# 0. Plot the image in color
+plt.imshow(original_img)
+plt.axis('off')
+plt.title(f"Input Image (True Label: {label_idx})")
+plt.show()
 
 # 1. Setup Rapide
 model = resnet # Assure-toi que 'resnet' est chargé et en .eval()
@@ -315,4 +322,4 @@ viz.visualize_image_attr(
     sign="all", show_colorbar=True, title="ViT - Sensibilité Occlusion"
 )
 
-# %%
+
