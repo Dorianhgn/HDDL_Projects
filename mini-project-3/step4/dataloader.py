@@ -19,19 +19,15 @@ BATCH_SIZE = 32
 IMG_SIZE = 224  # Taille standard pour ConvNeXt et Swin
 NUM_WORKERS = 2 # Pour charger rapidement 
 
-# Normalisation officielle ImageNet (CRITIQUE pour que les modèles SOTA fonctionnent)
+# Normalisation officielle ImageNet
 MEAN = [0.485, 0.456, 0.406] 
 STD = [0.229, 0.224, 0.225]
-# C'est la moyenne et l'écart-type de chaque pixel (Rouge, Vert, Bleu) calculés sur les 1,2 million d'images du dataset ImageNet original.
-# On normalise par les moyennes, écarts types du jeu train ImageNet car les modèles pré-entraînés ont été entraînés avec cette normalisation.
 
 def get_train_loader(data_dir=TRAIN_DATA_DIR, batch_size=BATCH_SIZE):
     """
     Crée un DataLoader pour l'entraînement (photos réelles de mini-ImageNet).
     Inclut des augmentations de données.
     """
-    
-    # Transformations d'entraînement avec augmentation
     train_transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.RandomHorizontalFlip(),
@@ -41,18 +37,16 @@ def get_train_loader(data_dir=TRAIN_DATA_DIR, batch_size=BATCH_SIZE):
         transforms.Normalize(mean=MEAN, std=STD)
     ])
 
-    # Charger le dataset
     dataset = datasets.ImageFolder(root=data_dir, transform=train_transform)
     
     print(f"✅ Dataset d'ENTRAÎNEMENT chargé depuis : {data_dir}")
     print(f"   - Nombre d'images : {len(dataset)}")
     print(f"   - Classes trouvées : {dataset.classes}")
 
-    # Créer le DataLoader
     train_loader = DataLoader(
         dataset, 
         batch_size=batch_size, 
-        shuffle=True,            # Mélanger pour l'entraînement
+        shuffle=True,
         num_workers=NUM_WORKERS,
         pin_memory=True
     )
@@ -62,28 +56,23 @@ def get_train_loader(data_dir=TRAIN_DATA_DIR, batch_size=BATCH_SIZE):
 def get_val_loader(data_dir=VAL_DATA_DIR, batch_size=BATCH_SIZE):
     """
     Crée un DataLoader pour la validation (photos réelles de mini-ImageNet).
-    Transformations simples sans augmentation.
     """
-    
-    # Transformations de validation (sans augmentation)
     val_transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize(mean=MEAN, std=STD)
     ])
 
-    # Charger le dataset
     dataset = datasets.ImageFolder(root=data_dir, transform=val_transform)
     
     print(f"✅ Dataset de VALIDATION chargé depuis : {data_dir}")
     print(f"   - Nombre d'images : {len(dataset)}")
     print(f"   - Classes trouvées : {dataset.classes}")
 
-    # Créer le DataLoader
     val_loader = DataLoader(
         dataset, 
         batch_size=batch_size, 
-        shuffle=False,           # Pas de mélange pour la validation
+        shuffle=False,
         num_workers=NUM_WORKERS,
         pin_memory=True
     )
@@ -93,31 +82,25 @@ def get_val_loader(data_dir=VAL_DATA_DIR, batch_size=BATCH_SIZE):
 def get_test_loader(data_dir=TEST_DATA_DIR, batch_size=BATCH_SIZE):
     """
     Crée un DataLoader pour le test (images stylisées d'ImageNet-R).
-    Transformations simples sans augmentation.
     """
-    
-    # 1. Transformations simples (Juste mise à l'échelle et normalisation)
     test_transform = transforms.Compose([
-        transforms.Resize((IMG_SIZE, IMG_SIZE)), # Redimensionner à 224x224
-        transforms.ToTensor(),                   # Convertir en Tensor (0-1)
-        transforms.Normalize(mean=MEAN, std=STD) # Normaliser (Maths)
+        transforms.Resize((IMG_SIZE, IMG_SIZE)), 
+        transforms.ToTensor(),                   
+        transforms.Normalize(mean=MEAN, std=STD) 
     ])
 
-    # 2. Charger le dossier
-    # ImageFolder associe automatiquement les dossiers aux classes
     dataset = datasets.ImageFolder(root=data_dir, transform=test_transform)
     
     print(f" Dataset de TEST chargé depuis : {data_dir}")
     print(f"   - Nombre d'images : {len(dataset)}")
     print(f"   - Classes trouvées : {dataset.classes}")
 
-    # 3. Créer le DataLoader (Le Serveur)
     test_loader = DataLoader(
         dataset, 
         batch_size=batch_size, 
-        shuffle=False,           # On ne mélange pas pour garder l'ordre des images
+        shuffle=False,
         num_workers=NUM_WORKERS,
-        pin_memory=True         # Accélérateur GPU
+        pin_memory=True
     )
 
     return test_loader, dataset.classes
@@ -125,7 +108,6 @@ def get_test_loader(data_dir=TEST_DATA_DIR, batch_size=BATCH_SIZE):
 def imshow_batch(dataloader, class_names):
     """
     Affiche 4 images d'un batch pour vérifier que tout va bien.
-    Gère la dé-normalisation pour l'affichage humain.
     """
     # Récupérer un batch
     images, labels = next(iter(dataloader))
@@ -148,6 +130,76 @@ def imshow_batch(dataloader, class_names):
         axes[idx].set_title(class_names[labels[idx]])
         axes[idx].axis("off")
     
+    plt.show()
+
+# --- CORRECTION ICI : La fonction est sortie (désindentée) ---
+def imshow_batch_by_class(dataloader, class_names, target_class, offset=0, n_images=4):
+    """
+    Affiche n_images d'une classe spécifique du dataloader de test.
+    - target_class : nom de la classe (str) ou index (int)
+    - offset : permet de ne pas toujours voir les mêmes images (décalage dans la liste)
+    - n_images : nombre d'images à afficher
+    """
+    # Trouver l'index de la classe si string
+    if isinstance(target_class, str):
+        try:
+            class_idx = class_names.index(target_class)
+        except ValueError:
+            print(f"❌ Erreur : La classe '{target_class}' n'existe pas dans la liste.")
+            return
+    else:
+        class_idx = target_class
+
+    # Parcourir le dataset pour trouver les images de la classe
+    dataset = dataloader.dataset
+    # Note : dataset.samples contient des tuples (chemin, index_label)
+    # On cherche tous les indices qui correspondent à notre classe
+    indices = [i for i, (_, label) in enumerate(dataset.samples) if label == class_idx]
+    
+    if not indices:
+        print(f"Aucune image trouvée pour la classe '{class_names[class_idx]}'")
+        return
+
+    # Vérifier l'offset
+    if offset >= len(indices):
+        print(f"⚠️ Offset trop grand ({offset}). Il n'y a que {len(indices)} images pour cette classe.")
+        return
+
+    # Sélectionner les indices voulus
+    selected_indices = indices[offset:offset+n_images]
+    
+    images = []
+    labels = []
+    
+    # Charger les images une par une
+    for idx in selected_indices:
+        img, label = dataset[idx]
+        images.append(img)
+        labels.append(label)
+
+    # Affichage
+    n_cols = len(images)
+    if n_cols == 0:
+        return
+
+    fig, axes = plt.subplots(1, n_cols, figsize=(4*n_cols, 5))
+    
+    # Si une seule image, axes n'est pas une liste, on le transforme
+    if n_cols == 1:
+        axes = [axes]
+        
+    for i, (img, label) in enumerate(zip(images, labels)):
+        img_np = img.numpy().transpose((1, 2, 0))
+        mean = np.array(MEAN)
+        std = np.array(STD)
+        img_np = std * img_np + mean
+        img_np = np.clip(img_np, 0, 1)
+        
+        axes[i].imshow(img_np)
+        axes[i].set_title(f"{class_names[label]}\nIndex: {selected_indices[i]}")
+        axes[i].axis("off")
+        
+    plt.tight_layout()
     plt.show()
 
 # --- TEST  ---

@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from tqdm import tqdm
+import argparse
 
 from dataloader import get_train_loader, get_val_loader
 from models import get_convnext_model, get_swin_model
@@ -23,12 +24,8 @@ from models import get_convnext_model, get_swin_model
 # Configuration
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_CLASSES = 21
-EPOCHS = 5
-LEARNING_RATE = 0.001
-SAVE_DIR = Path("checkpoints")
-SAVE_DIR.mkdir(exist_ok=True)
 
-def train_one_epoch(model, train_loader, criterion, optimizer, device, epoch):
+def train_one_epoch(model, train_loader, criterion, optimizer, device, epoch, total_epochs):
     """
     Entraîne le modèle pour une epoch.
     """
@@ -37,7 +34,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, device, epoch):
     correct = 0
     total = 0
     
-    pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
+    pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{total_epochs}")
     
     for images, labels in pbar:
         images, labels = images.to(device), labels.to(device)
@@ -94,7 +91,7 @@ def validate(model, val_loader, criterion, device):
     
     return val_loss, val_acc
 
-def train_model(model, model_name, train_loader, val_loader, epochs=EPOCHS):
+def train_model(model, model_name, train_loader, val_loader, epochs, learning_rate, save_dir):
     """
     Pipeline d'entraînement complet.
     """
@@ -103,14 +100,14 @@ def train_model(model, model_name, train_loader, val_loader, epochs=EPOCHS):
     print(f"{'='*60}\n")
     print(f"  Device : {DEVICE}")
     print(f"  Epochs : {epochs}")
-    print(f"  Learning Rate : {LEARNING_RATE}")
+    print(f"  Learning Rate : {learning_rate}")
     print(f"  Nombre de classes : {NUM_CLASSES}\n")
     
     model = model.to(DEVICE)
     
     # Loss et optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
     
     # Historique
@@ -125,14 +122,14 @@ def train_model(model, model_name, train_loader, val_loader, epochs=EPOCHS):
     best_val_loss = float('inf')
     
     # Créer le dossier de sauvegarde
-    SAVE_DIR_PATH = SAVE_DIR / model_name
-    SAVE_DIR_PATH.mkdir(exist_ok=True)
+    SAVE_DIR_PATH = save_dir
+    SAVE_DIR_PATH.mkdir(parents=True, exist_ok=True)
     
     # Boucle d'entraînement
     for epoch in range(epochs):
         # Entraînement
         train_loss, train_acc = train_one_epoch(
-            model, train_loader, criterion, optimizer, DEVICE, epoch
+            model, train_loader, criterion, optimizer, DEVICE, epoch, epochs
         )
         
         # Validation
@@ -199,7 +196,7 @@ def train_model(model, model_name, train_loader, val_loader, epochs=EPOCHS):
     
     return history, best_val_acc
 
-def plot_training_history(history, model_name):
+def plot_training_history(history, model_name, save_dir):
     """
     Affiche les courbes d'entraînement.
     """
@@ -224,7 +221,7 @@ def plot_training_history(history, model_name):
     ax2.grid(True)
     
     plt.tight_layout()
-    plot_path = SAVE_DIR / f"{model_name}_training.png"
+    plot_path = save_dir / f"{model_name}_training.png"
     plt.savefig(plot_path, dpi=150)
     print(f"   Courbes sauvegardées : {plot_path}")
     plt.show()
@@ -233,12 +230,37 @@ def main():
     """
     Pipeline principal d'entraînement.
     """
+    # Parser d'arguments
+    parser = argparse.ArgumentParser(description='Entraînement de modèles sur Mini-ImageNet')
+    parser.add_argument('--epochs', type=int, default=5, help='Nombre d\'epochs (défaut: 5)')
+    parser.add_argument('--lr', type=float, default=0.001, help='Learning rate (défaut: 0.001)')
+    parser.add_argument('--model', type=str, required=True, choices=['convnext', 'swin'],
+                       help='Modèle à entraîner (convnext ou swin)')
+    parser.add_argument('--exp_name', type=str, required=True,
+                       help='Nom de l\'expérience (dossier de sauvegarde)')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size (défaut: 32)')
+    args = parser.parse_args()
+    
+    # Créer le dossier de sauvegarde
+    save_dir = Path("checkpoints") / args.exp_name
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    print("\n" + "="*60)
+    print("  CONFIGURATION")
+    print("="*60)
+    print(f"  Modèle : {args.model}")
+    print(f"  Expérience : {args.exp_name}")
+    print(f"  Epochs : {args.epochs}")
+    print(f"  Learning Rate : {args.lr}")
+    print(f"  Batch Size : {args.batch_size}")
+    print(f"  Dossier sauvegarde : {save_dir}")
+    
     print("\n" + "="*60)
     print("  CHARGEMENT DES DONNÉES")
     print("="*60)
     
-    train_loader, train_classes = get_train_loader()
-    val_loader, val_classes = get_val_loader()
+    train_loader, train_classes = get_train_loader(batch_size=args.batch_size)
+    val_loader, val_classes = get_val_loader(batch_size=args.batch_size)
     
     print(f"\n   Classes d'entraînement : {train_classes}")
     print(f"   Classes de validation : {val_classes}")
@@ -248,29 +270,30 @@ def main():
         print("\n    ATTENTION : Les classes ne correspondent pas !")
         return
     
-    # Entraîner ConvNeXt
-    print("\n🔹 MODÈLE 1 : ConvNeXt-Tiny")
-    convnext_model = get_convnext_model(NUM_CLASSES)
-    convnext_history, convnext_val = train_model(
-        convnext_model, "convnext", train_loader, val_loader
-    )
-    plot_training_history(convnext_history, "ConvNeXt")
+    # Instancier le modèle choisi
+    if args.model == 'convnext':
+        print("\n🔹 MODÈLE : ConvNeXt-Tiny")
+        model = get_convnext_model(NUM_CLASSES)
+        model_display_name = "ConvNeXt"
+    else:  # swin
+        print("\n🔹 MODÈLE : Swin Transformer-Tiny")
+        model = get_swin_model(NUM_CLASSES)
+        model_display_name = "Swin Transformer"
     
-    # Entraîner Swin Transformer
-    print("\n🔹 MODÈLE 2 : Swin Transformer-Tiny")
-    swin_model = get_swin_model(NUM_CLASSES)
-    swin_history, swin_val = train_model(
-        swin_model, "swin", train_loader, val_loader
+    # Entraîner le modèle
+    history, best_val_acc = train_model(
+        model, args.model, train_loader, val_loader, 
+        args.epochs, args.lr, save_dir
     )
-    plot_training_history(swin_history, "Swin Transformer")
+    plot_training_history(history, model_display_name, save_dir)
     
     # Résumé
     print("\n" + "="*60)
     print("  RÉSULTATS D'ENTRAÎNEMENT")
     print("="*60)
     print(f"\n  VALIDATION (Mini-ImageNet) :")
-    print(f"    - ConvNeXt :        {convnext_val:.2f}%")
-    print(f"    - Swin Transformer: {swin_val:.2f}%")
+    print(f"    - {model_display_name}: {best_val_acc:.2f}%")
+    print(f"\n  Checkpoints sauvegardés dans : {save_dir}")
     print(f"\n   Pour tester sur ImageNet-R, lancez: python3 test.py\n")
 
 if __name__ == "__main__":
