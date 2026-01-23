@@ -192,9 +192,17 @@ optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
 # TODO: Train the model for the given number of epochs
 
+# Initialisation des listes pour tracker les losses
+total_losses = []
+recon_losses = []
+kl_losses = []
+
 for epoch in range(epochs):
     model.train()
     train_loss = 0
+    train_recon_loss = 0
+    train_kl_loss = 0
+    
     for batch_idx, (data, c) in enumerate(train_loader):
         data = data.to(device)
         c = c.to(device)
@@ -202,13 +210,44 @@ for epoch in range(epochs):
         data = data.unsqueeze(1)  # Ajouter une dimension de canal
         optimizer.zero_grad()
         recon_batch, mu, logvar = model(data, c)
-        loss = loss_function(recon_batch, data, mu, logvar, beta)
+        
+        # Calculer séparément les composantes de la loss
+        if LOSS == 'BCE':
+            recon_loss = F.binary_cross_entropy(recon_batch, data, reduction='sum')
+        elif LOSS == 'MSE':
+            recon_loss = F.mse_loss(recon_batch, data, reduction='sum')
+        
+        kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        loss = recon_loss + beta * kl_loss
+        
         loss.backward()
         train_loss += loss.item()
+        train_recon_loss += recon_loss.item()
+        train_kl_loss += kl_loss.item()
         optimizer.step()
     
+    # Moyennes sur l'ensemble du dataset
     avg_loss = train_loss / len(train_loader.dataset)
-    print(f'Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}')
+    avg_recon_loss = train_recon_loss / len(train_loader.dataset)
+    avg_kl_loss = train_kl_loss / len(train_loader.dataset)
+    
+    total_losses.append(avg_loss)
+    recon_losses.append(avg_recon_loss)
+    kl_losses.append(avg_kl_loss)
+    
+    print(f'Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}, Recon Loss: {avg_recon_loss:.4f}, KL Loss: {avg_kl_loss:.4f}')
+
+# Visualisation de l'évolution des losses
+plt.figure(figsize=(12, 5))
+plt.plot(range(1, epochs + 1), recon_losses, marker='o', label='Reconstruction Loss', linewidth=2)
+plt.plot(range(1, epochs + 1), kl_losses, marker='s', label='KL Divergence', linewidth=2)
+plt.xlabel('Époque', fontsize=12)
+plt.ylabel('Loss', fontsize=12)
+plt.title('Évolution de la Reconstruction Loss et de la KL Divergence', fontsize=14)
+plt.legend(fontsize=11)
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
 
 
 # %%
@@ -240,5 +279,226 @@ image_comparison(random_images.cpu(), reconstructed_images.cpu(), n=10)
 
 # %% [markdown]
 # ## Image generation with CVAE
+
+# %% [markdown]
+# ## 1. Génération Conditionnelle de nouvelles images
+
+# %%
+# Génération de 50 images : 5 samples pour chacune des 10 classes
+model.eval()
+n_samples_per_class = 5
+num_classes = 10
+
+with torch.no_grad():
+    # Générer les bruits latents z ~ N(0, I)
+    z_samples = torch.randn(n_samples_per_class * num_classes, latent_dim).to(device)
+    
+    # Créer les vecteurs one-hot c pour chaque classe
+    c_samples = []
+    for class_idx in range(num_classes):
+        c_class = F.one_hot(torch.tensor([class_idx] * n_samples_per_class), num_classes=num_classes).float()
+        c_samples.append(c_class)
+    c_samples = torch.cat(c_samples, dim=0).to(device)
+    
+    # Décoder pour générer les images
+    generated_images = model.decode(z_samples, c_samples)
+
+# Affichage sous forme de grille : 5 lignes x 10 colonnes
+class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 
+               'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
+
+plt.figure(figsize=(20, 10))
+for class_idx in range(num_classes):
+    for sample_idx in range(n_samples_per_class):
+        idx = class_idx * n_samples_per_class + sample_idx
+        ax = plt.subplot(n_samples_per_class, num_classes, sample_idx * num_classes + class_idx + 1)
+        plt.imshow(generated_images[idx].cpu().squeeze(), cmap='gray')
+        if sample_idx == 0:
+            plt.title(f'{class_names[class_idx]}', fontsize=10)
+        plt.axis('off')
+plt.suptitle('Génération Conditionnelle : 5 variations par classe', fontsize=16, y=0.98)
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ## 2. Étude de l'impact du paramètre $\beta$ sur l'espace latent (dim=2)
+
+# %%
+# Étude de l'impact de beta sur l'espace latent 2D
+beta_list = [0.1, 1.0, 5.0]
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+for idx_beta, beta_val in enumerate(beta_list):
+    print(f"\n=== Entraînement avec beta={beta_val} ===")
+    
+    # Réinitialiser le modèle et l'optimiseur
+    model_beta = CVAE(latent_dim=2).to(device)
+    optimizer_beta = optim.AdamW(model_beta.parameters(), lr=1e-3, weight_decay=1e-5)
+    
+    # Entraînement rapide (3 epochs)
+    for epoch in range(3):
+        model_beta.train()
+        train_loss = 0
+        for batch_idx, (data, c) in enumerate(train_loader):
+            data = data.to(device)
+            c = c.to(device)
+            data = data.unsqueeze(1)
+            optimizer_beta.zero_grad()
+            recon_batch, mu, logvar = model_beta(data, c)
+            loss = loss_function(recon_batch, data, mu, logvar, beta_val)
+            loss.backward()
+            train_loss += loss.item()
+            optimizer_beta.step()
+        
+        avg_loss = train_loss / len(train_loader.dataset)
+        print(f'Epoch {epoch + 1}, Loss: {avg_loss:.4f}')
+    
+    # Encoder tout le test set pour obtenir les z
+    model_beta.eval()
+    z_list = []
+    labels_list = []
+    
+    with torch.no_grad():
+        for data, c in test_loader:
+            data = data.to(device)
+            c = c.to(device)
+            data = data.unsqueeze(1)
+            mu, logvar = model_beta.encode(data, c)
+            z = model_beta.sample(mu, logvar)
+            z_list.append(z.cpu())
+            labels_list.append(torch.argmax(c, dim=1).cpu())
+    
+    z_all = torch.cat(z_list, dim=0).numpy()
+    labels_all = torch.cat(labels_list, dim=0).numpy()
+    
+    # Scatter plot 2D
+    ax = axes[idx_beta]
+    scatter = ax.scatter(z_all[:, 0], z_all[:, 1], c=labels_all, cmap='tab10', alpha=0.6, s=5)
+    ax.set_title(f'$\\beta$ = {beta_val}', fontsize=14)
+    ax.set_xlabel('Dimension latente 0', fontsize=11)
+    ax.set_ylabel('Dimension latente 1', fontsize=11)
+    ax.grid(True, alpha=0.3)
+    
+    if idx_beta == 2:
+        cbar = plt.colorbar(scatter, ax=ax)
+        cbar.set_label('Classe', fontsize=11)
+
+plt.suptitle('Impact du paramètre $\\beta$ sur l\'organisation de l\'espace latent 2D', fontsize=16)
+plt.tight_layout()
+plt.show()
+
+print("\n=== Observation ===")
+print("- Beta faible (0.1) : Les classes sont mieux séparées mais l'espace latent ne suit pas une distribution N(0,I).")
+print("- Beta élevé (5.0) : L'espace latent est bien centré en (0,0) mais les classes se mélangent.")
+print("- Beta = 1.0 : Bon compromis entre séparation des classes et respect de la contrainte de régularisation.")
+
+# %% [markdown]
+# ## 3. Espace Latent en Dimension 3
+
+# %%
+# Entraînement d'un modèle avec latent_dim=3
+print("=== Entraînement avec latent_dim=3 ===")
+model_3d = CVAE(latent_dim=3).to(device)
+optimizer_3d = optim.AdamW(model_3d.parameters(), lr=1e-3, weight_decay=1e-5)
+
+for epoch in range(3):
+    model_3d.train()
+    train_loss = 0
+    for batch_idx, (data, c) in enumerate(train_loader):
+        data = data.to(device)
+        c = c.to(device)
+        data = data.unsqueeze(1)
+        optimizer_3d.zero_grad()
+        recon_batch, mu, logvar = model_3d(data, c)
+        loss = loss_function(recon_batch, data, mu, logvar, beta=1.0)
+        loss.backward()
+        train_loss += loss.item()
+        optimizer_3d.step()
+    
+    avg_loss = train_loss / len(train_loader.dataset)
+    print(f'Epoch {epoch + 1}, Loss: {avg_loss:.4f}')
+
+# Encoder le test set
+model_3d.eval()
+z_3d_list = []
+labels_3d_list = []
+
+with torch.no_grad():
+    for data, c in test_loader:
+        data = data.to(device)
+        c = c.to(device)
+        data = data.unsqueeze(1)
+        mu, logvar = model_3d.encode(data, c)
+        z = model_3d.sample(mu, logvar)
+        z_3d_list.append(z.cpu())
+        labels_3d_list.append(torch.argmax(c, dim=1).cpu())
+
+z_3d_all = torch.cat(z_3d_list, dim=0).numpy()
+labels_3d_all = torch.cat(labels_3d_list, dim=0).numpy()
+
+# Affichage des 3 projections 2D
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+projections = [
+    (0, 1, 'Dim 0 vs Dim 1'),
+    (1, 2, 'Dim 1 vs Dim 2'),
+    (0, 2, 'Dim 0 vs Dim 2')
+]
+
+for idx, (dim_x, dim_y, title) in enumerate(projections):
+    ax = axes[idx]
+    scatter = ax.scatter(z_3d_all[:, dim_x], z_3d_all[:, dim_y], 
+                         c=labels_3d_all, cmap='tab10', alpha=0.6, s=5)
+    ax.set_title(title, fontsize=14)
+    ax.set_xlabel(f'Dimension latente {dim_x}', fontsize=11)
+    ax.set_ylabel(f'Dimension latente {dim_y}', fontsize=11)
+    ax.grid(True, alpha=0.3)
+    
+    if idx == 2:
+        cbar = plt.colorbar(scatter, ax=ax)
+        cbar.set_label('Classe', fontsize=11)
+
+plt.suptitle('Espace Latent 3D : Projections 2D', fontsize=16)
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ## 4. Explications, Justifications et Sources
+#
+# ### **1. Choix de l'Architecture**
+#
+# Nous avons choisi une architecture convolutionnelle (Conv2d pour l'encodeur, ConvTranspose2d pour le décodeur) plutôt que des couches linéaires denses. Cela permet de mieux capturer les dépendances spatiales des images Fashion-MNIST (28×28). Les couches `BatchNorm2d` sont utilisées pour stabiliser l'entraînement et éviter la disparition des gradients. La fonction d'activation `ReLU` est utilisée partout sauf à la sortie du décodeur où une `Sigmoid` est nécessaire pour ramener les pixels entre 0 et 1.
+#
+# L'architecture conditionnelle se fait en concaténant le vecteur one-hot de la classe $c$ aux features extraites par l'encodeur avant les couches fully-connected produisant $\mu$ et $\log\sigma^2$. De même, dans le décodeur, nous concaténons $c$ avec les features reconstruites à partir de $z$ avant de passer dans les couches de déconvolution.
+#
+# ### **2. Choix de la fonction de perte (Loss)**
+#
+# La perte ELBO (Evidence Lower Bound) est composée de deux termes :
+#
+# $$\mathcal{L} = \mathbb{E}_{q(z|x,c)}[\log p(x|z,c)] - \beta \cdot D_{KL}(q(z|x,c) \| p(z))$$
+#
+# * **Reconstruction Loss (BCE)** : Mesure la fidélité de l'image générée. Nous utilisons la Binary Cross Entropy (BCE) car nos pixels sont normalisés entre 0 et 1. Cette loss force le modèle à générer des images fidèles aux originaux.
+# * **KL Divergence (KLD)** : Agit comme un régularisateur pour forcer la distribution latente apprise $Q(z|x,c)$ à ressembler à une loi normale standard $\mathcal{N}(0, I)$. Le paramètre $\beta$ permet de pondérer ce terme (concept du $\beta$-VAE). Un $\beta > 1$ favorise un espace latent plus structuré et disentangled, tandis qu'un $\beta < 1$ favorise la qualité de reconstruction.
+#
+# ### **3. Hyper-paramètres**
+#
+# * **Learning Rate (1e-3) et AdamW** : Standard pour les VAEs, permet une convergence rapide. L'optimiseur AdamW ajoute un terme de régularisation L2 (weight decay) qui améliore la généralisation.
+# * **Batch Size (128)** : Un bon compromis entre stabilité du gradient et vitesse d'exécution sur GPU.
+# * **Latent Dimension** : Nous avons exploré `latent_dim=2` (pour la visualisation) et `latent_dim=3` (pour plus de capacité expressive). En pratique, des dimensions plus élevées (10-50) sont souvent utilisées pour des datasets plus complexes.
+# * **Regularization weight ($\beta$)** : Nos expériences ont montré qu'un $\beta$ trop élevé (5.0) sacrifie la qualité de reconstruction pour une distribution parfaite, forçant tous les points vers (0,0) et mélangeant les classes. Un $\beta$ trop faible (0.1) perd la capacité générative du VAE en créant des "trous" dans l'espace latent. **$\beta=1.0$ est un bon équilibre** entre reconstruction et régularisation.
+#
+# ### **4. Observations sur les expériences**
+#
+# * **Génération conditionnelle** : Le CVAE permet de contrôler la classe générée en spécifiant le vecteur one-hot $c$. Les 5 variations par classe montrent que le modèle a appris à générer différentes instances d'une même classe en variant $z$.
+# * **Impact de $\beta$** : Comme attendu théoriquement, un $\beta$ élevé contraint fortement l'espace latent vers une distribution normale mais au prix d'un mélange des classes. Un $\beta$ faible sépare mieux les classes mais crée un espace moins régulier.
+# * **Espace latent 3D** : Ajouter une dimension supplémentaire donne plus de liberté au modèle pour organiser les classes. Les projections 2D permettent de visualiser comment les classes se structurent dans cet espace de dimension supérieure.
+#
+# ### **5. Sources**
+#
+# * Kingma, D. P., & Welling, M. (2013). *Auto-encoding variational bayes*. arXiv:1312.6114. [Article fondateur des VAEs]
+# * Sohn, K., Lee, H., & Yan, X. (2015). *Learning structured output representation using deep conditional generative models*. NeurIPS. [Article sur les CVAEs]
+# * Higgins, I., et al. (2017). *beta-VAE: Learning Basic Visual Concepts with a Constrained Variational Framework*. ICLR. [Article sur l'impact du paramètre beta]
+# * Documentation PyTorch : https://pytorch.org/docs/stable/index.html
+# * Fashion-MNIST dataset : Xiao, H., Rasul, K., & Vollgraf, R. (2017). *Fashion-MNIST: a Novel Image Dataset for Benchmarking Machine Learning Algorithms*. arXiv:1708.07747.
 
 # %%

@@ -188,3 +188,9 @@ temp_results/
 
 *.tar.gz
 *.zip
+data*/
+*.pth
+*.ckpt
+
+# need to define a gdownload folder for step2
+mini-project-3/step2/experiments
