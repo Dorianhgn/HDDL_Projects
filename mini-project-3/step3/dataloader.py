@@ -11,6 +11,20 @@ from PIL import Image
 
 from config import Config
 
+# Correspondance codes ImageNet -> noms lisibles
+IMAGENETTE_CLASSES = {
+    'n01440764': 'Tench (poisson)',
+    'n02102040': 'Springer spaniel (chien)', 
+    'n02979186': 'Lecteur cassette',
+    'n03000684': 'Tronçonneuse',
+    'n03028079': 'Église',
+    'n03394916': 'Cor d\'harmonie',
+    'n03417042': 'Camion poubelle',
+    'n03425413': 'Pompe à essence',
+    'n03445777': 'Balle de golf',
+    'n03888257': 'Parachute'
+}
+
 
 # ========================
 # 1. Transformation Puzzle
@@ -34,12 +48,7 @@ class PuzzlePermutation:
         rng = random.Random(seed)
         self.permutation = list(range(self.num_patches))
         rng.shuffle(self.permutation)
-        
-        print(f"🧩 Puzzle Permutation initialisée:")
-        print(f"   - Image size: {img_size}x{img_size}")
-        print(f"   - Patch size: {patch_size}x{patch_size}")
-        print(f"   - Grid: {self.grid_size}x{self.grid_size} = {self.num_patches} patches")
-        print(f"   - Seed: {seed} (permutation fixe)")
+
     
     def __call__(self, img):
         """
@@ -113,10 +122,8 @@ def download_imagenette(data_dir):
     
     # Vérifie si déjà téléchargé
     if extract_path.exists():
-        print(f"✅ Dataset Imagenette déjà présent dans {extract_path}")
+
         return extract_path
-    
-    print(f"📥 Téléchargement de Imagenette depuis {Config.DATASET_URL}...")
     
     # Télécharge
     tar_path = data_dir / "imagenette2.tgz"
@@ -129,14 +136,13 @@ def download_imagenette(data_dir):
                 f.write(chunk)
                 pbar.update(len(chunk))
     
-    print("📦 Extraction de l'archive...")
+    # Extraction
     with tarfile.open(tar_path, 'r:gz') as tar:
         tar.extractall(data_dir)
     
     # Nettoie l'archive
     tar_path.unlink()
     
-    print(f"✅ Dataset Imagenette extrait dans {extract_path}")
     return extract_path
 
 
@@ -150,10 +156,7 @@ def create_dataloaders(use_puzzle=True):
     Returns:
         train_loader, val_loader, puzzle_transform
     """
-    print("\n" + "="*70)
-    print("📊 Création des DataLoaders")
-    print("="*70)
-    
+
     # Télécharge le dataset
     dataset_path = download_imagenette(Config.DATA_DIR)
     
@@ -182,7 +185,7 @@ def create_dataloaders(use_puzzle=True):
             puzzle_transform,
             transforms.Normalize(Config.IMAGENET_MEAN, Config.IMAGENET_STD)
         ])
-        print("🧩 Mode: PUZZLE ACTIVÉ")
+
     else:
         train_transform = transforms.Compose([
             transforms.Resize((Config.IMG_SIZE, Config.IMG_SIZE)),
@@ -190,17 +193,17 @@ def create_dataloaders(use_puzzle=True):
             transforms.Normalize(Config.IMAGENET_MEAN, Config.IMAGENET_STD)
         ])
         val_transform = train_transform
-        print("📷 Mode: IMAGES ORIGINALES")
+
     
     # Charge les datasets
     train_dataset = ImageFolder(dataset_path / "train", transform=train_transform)
     val_dataset = ImageFolder(dataset_path / "val", transform=val_transform)
     
-    print(f"\n📈 Dataset Statistics:")
-    print(f"   - Train: {len(train_dataset)} images")
-    print(f"   - Val: {len(val_dataset)} images")
-    print(f"   - Classes: {Config.NUM_CLASSES}")
-    print(f"   - Class names: {train_dataset.classes}")
+    # Remplace les codes par les noms lisibles
+    readable_classes = [IMAGENETTE_CLASSES.get(cls, cls) for cls in train_dataset.classes]
+    train_dataset.classes = readable_classes
+    val_dataset.classes = readable_classes
+
     
     # Crée les DataLoaders
     train_loader = DataLoader(
@@ -219,9 +222,5 @@ def create_dataloaders(use_puzzle=True):
         pin_memory=True
     )
     
-    print(f"\n🔄 DataLoader Info:")
-    print(f"   - Batch size: {Config.BATCH_SIZE}")
-    print(f"   - Train batches: {len(train_loader)}")
-    print(f"   - Val batches: {len(val_loader)}")
-    
+
     return train_loader, val_loader, puzzle_transform

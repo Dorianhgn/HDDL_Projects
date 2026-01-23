@@ -21,7 +21,7 @@ def plot_training_comparison(history_resnet, history_vit, save_path=None):
     axes[0].plot(epochs, history_vit['val_acc'], 's-', label='ViT-Base/16', linewidth=2, markersize=8)
     axes[0].set_xlabel('Epoch', fontsize=12)
     axes[0].set_ylabel('Validation Accuracy (%)', fontsize=12)
-    axes[0].set_title('🎯 Validation Accuracy: ResNet vs ViT', fontsize=14, fontweight='bold')
+    axes[0].set_title('Validation Accuracy: ResNet vs ViT', fontsize=14, fontweight='bold')
     axes[0].legend(fontsize=11)
     axes[0].grid(True, alpha=0.3)
     
@@ -38,7 +38,7 @@ def plot_training_comparison(history_resnet, history_vit, save_path=None):
     
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"💾 Figure sauvegardée: {save_path}")
+        print(f"Figure sauvegardée: {save_path}")
     
     plt.show()
 
@@ -81,24 +81,11 @@ def visualize_puzzle_effect(puzzle_transform, val_dataset, num_samples=4, save_p
         axes[i, 1].set_title(f'Puzzled (Seed={Config.SEED_PERMUTATION})', fontsize=10)
         axes[i, 1].axis('off')
     
-    plt.suptitle('🧩 Effet de la Transformation Puzzle', fontsize=16, fontweight='bold', y=1.00)
+    plt.suptitle('Effet de la Transformation Puzzle', fontsize=16, fontweight='bold', y=1.00)
     plt.tight_layout()
     
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"💾 Figure sauvegardée: {save_path}")
+        print(f"Figure sauvegardée: {save_path}")
     
     plt.show()
-
-
-def visualize_vit_attention(model, img_tensor, puzzle_transform=None, save_path=None):
-    """
-    Visualise l'Attention Map du ViT sur une image (originale ou puzzlée).
-    
-    Note: Cette fonction nécessite d'extraire les poids d'attention du modèle.
-    Pour simplifier, on affiche un placeholder ici.
-    """
-    print("\n⚠️  Visualisation d'attention non implémentée dans cette version.")
-    print("   Pour voir les attention maps, utilisez:")
-    print("   - timm.models.vision_transformer.VisionTransformer avec return_attention=True")
-    print("   - ou intégrez un hook sur les couches d'attention.")

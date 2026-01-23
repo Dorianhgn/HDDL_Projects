@@ -72,7 +72,7 @@ def plot_all_models_comparison(histories, save_path=None):
     
     axes[0, 0].set_xlabel('Epoch', fontsize=12)
     axes[0, 0].set_ylabel('Validation Accuracy (%)', fontsize=12)
-    axes[0, 0].set_title('🎯 Validation Accuracy: Tous les Modèles', 
+    axes[0, 0].set_title('Validation Accuracy: Tous les Modèles', 
                          fontsize=14, fontweight='bold')
     axes[0, 0].legend(fontsize=10)
     axes[0, 0].grid(True, alpha=0.3)
@@ -102,7 +102,7 @@ def plot_all_models_comparison(histories, save_path=None):
     
     axes[1, 0].set_xlabel('Epoch', fontsize=12)
     axes[1, 0].set_ylabel('Validation Accuracy (%)', fontsize=12)
-    axes[1, 0].set_title('🔴 ResNet-50: Original vs Puzzle',
+    axes[1, 0].set_title('ResNet-50: Original vs Puzzle',
                          fontsize=14, fontweight='bold')
     axes[1, 0].legend(fontsize=11)
     axes[1, 0].grid(True, alpha=0.3)
@@ -117,7 +117,7 @@ def plot_all_models_comparison(histories, save_path=None):
     
     axes[1, 1].set_xlabel('Epoch', fontsize=12)
     axes[1, 1].set_ylabel('Validation Accuracy (%)', fontsize=12)
-    axes[1, 1].set_title('🔵 ViT-Base/16: Original vs Puzzle',
+    axes[1, 1].set_title('ViT-Base/16: Original vs Puzzle',
                          fontsize=14, fontweight='bold')
     axes[1, 1].legend(fontsize=11)
     axes[1, 1].grid(True, alpha=0.3)
@@ -139,7 +139,7 @@ def main():
     """Fonction principale exécutant l'expérience complète"""
     
     print("\n" + "="*70)
-    print("🧩 THE PUZZLE CHALLENGE: ResNet-50 vs ViT-Base/16")
+    print("THE PUZZLE CHALLENGE: ResNet-50 vs ViT-Base/16")
     print("="*70)
     print("Entraînement de 4 modèles:")
     print("  1. ResNet-50 sur données ORIGINALES")
@@ -149,7 +149,7 @@ def main():
     print("="*70 + "\n")
     
     # Configuration
-    print(f"⚙️  Configuration:")
+    print(f"Configuration:")
     print(f"   - Device: {Config.DEVICE}")
     print(f"   - Image size: {Config.IMG_SIZE}x{Config.IMG_SIZE}")
     print(f"   - Patch size: {Config.PATCH_SIZE}x{Config.PATCH_SIZE}")
@@ -164,7 +164,7 @@ def main():
     # Étape 1: Charge les données ORIGINALES (sans puzzle)
     # ========================================================================
     print("\n" + "="*70)
-    print("📊 PHASE 1: Chargement des données ORIGINALES")
+    print("PHASE 1: Chargement des données ORIGINALES")
     print("="*70)
     
     train_loader_orig, val_loader_orig, _ = create_dataloaders(use_puzzle=False)
@@ -173,7 +173,7 @@ def main():
     # Étape 2: Charge les données PUZZLE
     # ========================================================================
     print("\n" + "="*70)
-    print("📊 PHASE 2: Chargement des données PUZZLE")
+    print("PHASE 2: Chargement des données PUZZLE")
     print("="*70)
     
     train_loader_puzzle, val_loader_puzzle, puzzle_transform = create_dataloaders(use_puzzle=True)
@@ -182,7 +182,7 @@ def main():
     # Étape 3: Visualise l'effet du puzzle
     # ========================================================================
     print("\n" + "="*70)
-    print("📸 Visualisation de la Transformation Puzzle")
+    print("Visualisation de la Transformation Puzzle")
     print("="*70)
     
     # Crée un dataset temporaire pour visualisation
@@ -205,7 +205,7 @@ def main():
     
     # MODÈLE 1: ResNet-50 sur données ORIGINALES
     print("\n" + "="*70)
-    print("🔴 MODÈLE 1/4: ResNet-50 sur données ORIGINALES")
+    print("MODÈLE 1/4: ResNet-50 sur données ORIGINALES")
     print("="*70)
     resnet_orig = create_resnet50(num_classes=Config.NUM_CLASSES, freeze_backbone=True)
     histories['ResNet_Original'] = train_model(
@@ -218,7 +218,7 @@ def main():
     
     # MODÈLE 2: ViT-Base/16 sur données ORIGINALES
     print("\n" + "="*70)
-    print("🔵 MODÈLE 2/4: ViT-Base/16 sur données ORIGINALES")
+    print("MODÈLE 2/4: ViT-Base/16 sur données ORIGINALES")
     print("="*70)
     vit_orig = create_vit_base(num_classes=Config.NUM_CLASSES, freeze_backbone=True)
     histories['ViT_Original'] = train_model(
@@ -231,7 +231,7 @@ def main():
     
     # MODÈLE 3: ResNet-50 sur données PUZZLE
     print("\n" + "="*70)
-    print("🟠 MODÈLE 3/4: ResNet-50 sur données PUZZLE")
+    print("MODÈLE 3/4: ResNet-50 sur données PUZZLE")
     print("="*70)
     resnet_puzzle = create_resnet50(num_classes=Config.NUM_CLASSES, freeze_backbone=True)
     histories['ResNet_Puzzle'] = train_model(
@@ -244,7 +244,7 @@ def main():
     
     # MODÈLE 4: ViT-Base/16 sur données PUZZLE
     print("\n" + "="*70)
-    print("🟢 MODÈLE 4/4: ViT-Base/16 sur données PUZZLE")
+    print("MODÈLE 4/4: ViT-Base/16 sur données PUZZLE")
     print("="*70)
     vit_puzzle = create_vit_base(num_classes=Config.NUM_CLASSES, freeze_backbone=True)
     histories['ViT_Puzzle'] = train_model(
@@ -259,7 +259,7 @@ def main():
     # Étape 5: Compare tous les résultats
     # ========================================================================
     print("\n" + "="*70)
-    print("📊 ANALYSE COMPARATIVE DES 4 MODÈLES")
+    print("ANALYSE COMPARATIVE DES 4 MODÈLES")
     print("="*70)
     
     # Visualisation comparative
@@ -281,28 +281,6 @@ def main():
         print(f"│ {name_display:<23} │ {acc:>11.2f}% │ {loss:>12.4f} │")
     
     print("└─────────────────────────┴──────────────┴──────────────┘\n")
-    
-    # Analyse des écarts
-    print("📈 ANALYSE DES ÉCARTS:\n")
-    
-    # Écart ResNet: Original vs Puzzle
-    resnet_drop = histories['ResNet_Original']['val_acc'][-1] - histories['ResNet_Puzzle']['val_acc'][-1]
-    print(f"🔴 ResNet-50:")
-    print(f"   Original: {histories['ResNet_Original']['val_acc'][-1]:.2f}%")
-    print(f"   Puzzle:   {histories['ResNet_Puzzle']['val_acc'][-1]:.2f}%")
-    print(f"   Chute:    {resnet_drop:+.2f}% {'❌ ÉCHOUE' if resnet_drop > 30 else '⚠️'}")
-    
-    # Écart ViT: Original vs Puzzle
-    vit_drop = histories['ViT_Original']['val_acc'][-1] - histories['ViT_Puzzle']['val_acc'][-1]
-    print(f"\n🔵 ViT-Base/16:")
-    print(f"   Original: {histories['ViT_Original']['val_acc'][-1]:.2f}%")
-    print(f"   Puzzle:   {histories['ViT_Puzzle']['val_acc'][-1]:.2f}%")
-    print(f"   Chute:    {vit_drop:+.2f}% {'✅ S\\ADAPTE' if vit_drop < 30 else '⚠️'}")
-    
-    # Comparaison des robustesses
-    print(f"\n💡 ROBUSTESSE RELATIVE:")
-    print(f"   Le ViT est {abs(resnet_drop - vit_drop):.1f}% plus robuste que le ResNet")
-    print(f"   face à la permutation spatiale.")
     
     # Sauvegarde tous les historiques
     for model_name, history in histories.items():
@@ -403,12 +381,6 @@ class PuzzlePermutation:
         rng = random.Random(seed)
         self.permutation = list(range(self.num_patches))
         rng.shuffle(self.permutation)
-        
-        print(f"🧩 Puzzle Permutation initialisée:")
-        print(f"   - Image size: {img_size}x{img_size}")
-        print(f"   - Patch size: {patch_size}x{patch_size}")
-        print(f"   - Grid: {self.grid_size}x{self.grid_size} = {self.num_patches} patches")
-        print(f"   - Seed: {seed} (permutation fixe)")
     
     def __call__(self, img):
         """
@@ -882,27 +854,15 @@ def visualize_puzzle_effect(puzzle_transform, val_dataset, num_samples=4, save_p
         axes[i, 1].set_title(f'Puzzled (Seed={Config.SEED_PERMUTATION})', fontsize=10)
         axes[i, 1].axis('off')
     
-    plt.suptitle('🧩 Effet de la Transformation Puzzle', fontsize=16, fontweight='bold', y=1.00)
+    plt.suptitle('Effet de la Transformation Puzzle', fontsize=16, fontweight='bold', y=1.00)
     plt.tight_layout()
     
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"💾 Figure sauvegardée: {save_path}")
+        print(f"Figure sauvegardée: {save_path}")
     
     plt.show()
 
-
-def visualize_vit_attention(model, img_tensor, puzzle_transform=None, save_path=None):
-    """
-    Visualise l'Attention Map du ViT sur une image (originale ou puzzlée).
-    
-    Note: Cette fonction nécessite d'extraire les poids d'attention du modèle.
-    Pour simplifier, on affiche un placeholder ici.
-    """
-    print("\n⚠️  Visualisation d'attention non implémentée dans cette version.")
-    print("   Pour voir les attention maps, utilisez:")
-    print("   - timm.models.vision_transformer.VisionTransformer avec return_attention=True")
-    print("   - ou intégrez un hook sur les couches d'attention.")
 
 
 # ============================================================================
@@ -913,14 +873,14 @@ def main():
     """Fonction principale exécutant l'expérience complète"""
     
     print("\n" + "="*70)
-    print("🧩 THE PUZZLE CHALLENGE: ResNet-50 vs ViT-Base/16")
+    print("THE PUZZLE CHALLENGE: ResNet-50 vs ViT-Base/16")
     print("="*70)
     print("Objectif: Démontrer que le ViT s'adapte à la permutation spatiale")
     print("          alors que le CNN échoue (différence de biais inductif)")
     print("="*70 + "\n")
     
     # Configuration
-    print(f"⚙️  Configuration:")
+    print(f"Configuration:")
     print(f"   - Device: {Config.DEVICE}")
     print(f"   - Image size: {Config.IMG_SIZE}x{Config.IMG_SIZE}")
     print(f"   - Patch size: {Config.PATCH_SIZE}x{Config.PATCH_SIZE}")
@@ -940,7 +900,7 @@ def main():
     # Étape 2: Visualise l'effet du puzzle
     # ========================================================================
     print("\n" + "="*70)
-    print("📸 Visualisation de la Transformation Puzzle")
+    print("Visualisation de la Transformation Puzzle")
     print("="*70)
     
     # Crée un dataset temporaire sans transformations pour la visualisation
