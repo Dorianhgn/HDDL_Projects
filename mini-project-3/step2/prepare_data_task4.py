@@ -1,9 +1,9 @@
 """
 TASK 4: A --material--> B --shape--> C
-Trouve la Sphère Grise. 
-Regarde quel est son MATÉRIAU (ex: Métal). 
-Trouve le CYLINDRE fait de ce MÊME MATÉRIAU. 
-Quelle est la couleur de l'objet le plus PETIT à côté de ce cylindre ?
+    Trouve la Sphère Grise. 
+    Regarde quel est son MATÉRIAU (ex: Métal). 
+    Trouve le CYLINDRE fait de ce MÊME MATÉRIAU. 
+    Quelle est la couleur de l'objet le plus PETIT à côté de ce cylindre ?
 """
 
 import json
