@@ -18,6 +18,7 @@ def process_scenes(json_path, split_name):
 
     task1_data = [] # (filename, label)
     task2_data = [] # (filename, label)
+    task2_metadata = [] # Métadonnées des objets
 
     for scene in tqdm(data['scenes']):
         img_name = scene['image_filename']
@@ -57,15 +58,41 @@ def process_scenes(json_path, split_name):
                 closest_obj = max(dists, key=lambda x: x[0])[1]
                 label = COLOR_TO_IDX[closest_obj['color']]
                 task2_data.append({"image": img_name, "label": label})
+                
+                # Extraire les métadonnées
+                anchor_meta = {
+                    'color': anchor['color'],
+                    'material': anchor['material'],
+                    'shape': anchor['shape'],
+                    'size': anchor['size'],
+                    'pixel_coords': anchor['pixel_coords'],
+                    '3d_coords': anchor['3d_coords']
+                }
+                target_meta = {
+                    'color': closest_obj['color'],
+                    'material': closest_obj['material'],
+                    'shape': closest_obj['shape'],
+                    'size': closest_obj['size'],
+                    'pixel_coords': closest_obj['pixel_coords'],
+                    '3d_coords': closest_obj['3d_coords']
+                }
+                task2_metadata.append({
+                    "image": img_name,
+                    "anchor": anchor_meta,
+                    "target": target_meta
+                })
 
     # Sauvegarde
     with open(f"task1_{split_name}.json", 'w') as f:
         json.dump(task1_data, f)
     with open(f"task2_{split_name}.json", 'w') as f:
         json.dump(task2_data, f)
+    with open(f"task2_{split_name}_metadata.json", 'w') as f:
+        json.dump(task2_metadata, f)
         
     print(f"[{split_name}] Tâche 1 (Cylindre Loin): {len(task1_data)} images")
     print(f"[{split_name}] Tâche 2 (Voisin Sphère): {len(task2_data)} images")
+    print(f"[{split_name}] Tâche 2 Metadata: {len(task2_metadata)} entrées")
 
 if __name__ == "__main__":
     process_scenes(SCENES_PATH_TRAIN, "train")

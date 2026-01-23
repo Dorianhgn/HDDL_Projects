@@ -20,7 +20,8 @@ def process_attribute_relay(json_path, split_name):
     with open(json_path, 'r') as f:
         data = json.load(f)
 
-    task_data = [] 
+    task_data = []
+    task_metadata = [] 
     
     # 1. L'ANCRE (Départ fixe pour aider le modèle à démarrer)
     START_SHAPE = 'sphere'
@@ -70,13 +71,50 @@ def process_attribute_relay(json_path, split_name):
                 if obj_c:
                     label = COLOR_TO_IDX[obj_c['color']]
                     task_data.append({"image": img_name, "label": label})
+                    
+                    # Extraire les métadonnées (A = ancre, B = relais, C = cible)
+                    anchor_meta = {
+                        'color': obj_a['color'],
+                        'material': obj_a['material'],
+                        'shape': obj_a['shape'],
+                        'size': obj_a['size'],
+                        'pixel_coords': obj_a['pixel_coords'],
+                        '3d_coords': obj_a['3d_coords']
+                    }
+                    relay_meta = {
+                        'color': obj_b['color'],
+                        'material': obj_b['material'],
+                        'shape': obj_b['shape'],
+                        'size': obj_b['size'],
+                        'pixel_coords': obj_b['pixel_coords'],
+                        '3d_coords': obj_b['3d_coords']
+                    }
+                    target_meta = {
+                        'color': obj_c['color'],
+                        'material': obj_c['material'],
+                        'shape': obj_c['shape'],
+                        'size': obj_c['size'],
+                        'pixel_coords': obj_c['pixel_coords'],
+                        '3d_coords': obj_c['3d_coords']
+                    }
+                    task_metadata.append({
+                        "image": img_name,
+                        "anchor": anchor_meta,
+                        "relay": relay_meta,
+                        "target": target_meta
+                    })
 
     # Sauvegarde
     filename = f"task4_{split_name}.json"
     with open(filename, 'w') as f:
         json.dump(task_data, f)
+    
+    metadata_filename = f"task4_{split_name}_metadata.json"
+    with open(metadata_filename, 'w') as f:
+        json.dump(task_metadata, f)
         
     print(f"[{split_name}] Dataset Relay généré : {len(task_data)} images")
+    print(f"[{split_name}] Metadata généré : {len(task_metadata)} entrées")
 
 if __name__ == "__main__":
     ROOT = "data_clevr/CLEVR_v1.0"
