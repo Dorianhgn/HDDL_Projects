@@ -12,7 +12,7 @@ import yaml
 import importlib
 import json
 from pathlib import Path
-
+from models.losses import DiceLoss, CombinedLoss, FocalLoss
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Test model with task-specific metrics')
@@ -362,11 +362,16 @@ def main():
     
     loaders = get_oxford_loaders(data_path, **data_kwargs)
     
+    n_classes = model_kwargs.get('n_classes', 3)
+
     # Setup criterion
     criterion_map = {
         'CrossEntropyLoss': nn.CrossEntropyLoss(),
         'BCEWithLogitsLoss': nn.BCEWithLogitsLoss(),
         'MSELoss': nn.MSELoss(),
+        'DiceLoss': DiceLoss(n_classes=n_classes),
+        'CombinedLoss': CombinedLoss(n_classes=n_classes, ce_weight=0.5, dice_weight=0.5),
+        'FocalLoss': FocalLoss(alpha=1.0, gamma=2.0),
     }
     criterion_name = config.get('criterion', 'MSELoss')
     criterion = criterion_map[criterion_name]
