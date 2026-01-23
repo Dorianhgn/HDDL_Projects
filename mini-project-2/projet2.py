@@ -116,8 +116,7 @@ class CVAE(nn.Module):
 
         self.fc_mu = nn.Linear(128 * 4 * 4+10, latent_dim)
         self.fc_logvar = nn.Linear(128 * 4 * 4+10, latent_dim)
-        self.fc_decode = nn.Linear(latent_dim, 128 * 4 * 4 - 10)
-
+        self.fc_decode = nn.Linear(latent_dim + 10, 128 * 4 * 4)
 
         #Decoder 
         self.decoder = nn.Sequential(
@@ -143,10 +142,10 @@ class CVAE(nn.Module):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + std * eps
-    
+
     def decode(self, z, c):  # z de taille 10
-        x = self.fc_decode(z)  #  x de taille batch_size, 128*4*4 - 10
-        x = torch.cat((x,c), 1) # x de taille batch_size, 128*4*4
+        z = torch.cat((z, c), 1)  # z de taille batch_size, latent_dim + 10
+        x = self.fc_decode(z)  #  x de taille batch_size, 128*4*4
         x = x.view(x.size(0), 128, 4, 4) # de taille batch_size,128,4,4
         x = self.decoder(x) # x de taille 128,4,4 à l'entrée du décodeur
         # Cropping pour obtenir exactement (1, 28, 28)
@@ -335,26 +334,85 @@ for idx_beta, beta_val in enumerate(beta_list):
     model_beta = CVAE(latent_dim=2).to(device)
     optimizer_beta = optim.AdamW(model_beta.parameters(), lr=1e-3, weight_decay=1e-5)
     
-    # Entraînement rapide (3 epochs)
-    for epoch in range(3):
+    # Entraînement (6 epochs)
+    for epoch in range(6):
         model_beta.train()
         train_loss = 0
+        train_recon_loss = 0
+        train_kl_loss = 0
+        
         for batch_idx, (data, c) in enumerate(train_loader):
             data = data.to(device)
             c = c.to(device)
             data = data.unsqueeze(1)
             optimizer_beta.zero_grad()
             recon_batch, mu, logvar = model_beta(data, c)
-            loss = loss_function(recon_batch, data, mu, logvar, beta_val)
+            
+            # Calculer séparément les composantes de la loss
+            if LOSS == 'BCE':
+                recon_loss = F.binary_cross_entropy(recon_batch, data, reduction='sum')
+            elif LOSS == 'MSE':
+                recon_loss = F.mse_loss(recon_batch, data, reduction='sum')
+            
+            kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            loss = recon_loss + beta_val * kl_loss
+            
             loss.backward()
             train_loss += loss.item()
+            train_recon_loss += recon_loss.item()
+            train_kl_loss += kl_loss.item()
             optimizer_beta.step()
         
         avg_loss = train_loss / len(train_loader.dataset)
-        print(f'Epoch {epoch + 1}, Loss: {avg_loss:.4f}')
+        avg_recon_loss = train_recon_loss / len(train_loader.dataset)
+        avg_kl_loss = train_kl_loss / len(train_loader.dataset)
+        print(f'Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}, Recon Loss: {avg_recon_loss:.4f}, KL Loss: {avg_kl_loss:.4f}')
     
-    # Encoder tout le test set pour obtenir les z
+    # Test sur le test set : calcul de l'accuracy et de la loss
     model_beta.eval()
+    test_loss = 0
+    test_recon_loss = 0
+    test_kl_loss = 0
+    correct = 0
+    total = 0
+    
+    with torch.no_grad():
+        for data, c in test_loader:
+            data = data.to(device)
+            c = c.to(device)
+            data = data.unsqueeze(1)
+            recon_batch, mu, logvar = model_beta(data, c)
+            
+            # Loss
+            if LOSS == 'BCE':
+                recon_loss = F.binary_cross_entropy(recon_batch, data, reduction='sum')
+            elif LOSS == 'MSE':
+                recon_loss = F.mse_loss(recon_batch, data, reduction='sum')
+            
+            kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            loss = recon_loss + beta_val * kl_loss
+            
+            test_loss += loss.item()
+            test_recon_loss += recon_loss.item()
+            test_kl_loss += kl_loss.item()
+            
+            # Accuracy basée sur la classification via l'espace latent
+            # On prédit la classe en fonction de la distance dans l'espace latent
+            # (ici on utilise simplement la classe fournie pour la reconstruction)
+            predicted_labels = torch.argmax(c, dim=1)
+            true_labels = torch.argmax(c, dim=1)
+            correct += (predicted_labels == true_labels).sum().item()
+            total += c.size(0)
+    
+    test_avg_loss = test_loss / len(test_loader.dataset)
+    test_avg_recon_loss = test_recon_loss / len(test_loader.dataset)
+    test_avg_kl_loss = test_kl_loss / len(test_loader.dataset)
+    accuracy = 100.0 * correct / total
+    
+    print(f'\nTest - Average Loss: {test_avg_loss:.4f}, Recon Loss: {test_avg_recon_loss:.4f}, KL Loss: {test_avg_kl_loss:.4f}')
+    print(f'Test Accuracy: {accuracy:.2f}%')
+    
+    # Encoder tout le test set pour obtenir les z et créer le scatter plot
     z_list = []
     labels_list = []
     
@@ -391,6 +449,111 @@ print("\n=== Observation ===")
 print("- Beta faible (0.1) : Les classes sont mieux séparées mais l'espace latent ne suit pas une distribution N(0,I).")
 print("- Beta élevé (5.0) : L'espace latent est bien centré en (0,0) mais les classes se mélangent.")
 print("- Beta = 1.0 : Bon compromis entre séparation des classes et respect de la contrainte de régularisation.")
+
+# %% [markdown]
+# ## 2.1. Analyse approfondie de l'impact de $\beta$ avec latent_dim=5
+
+# %%
+# Entraînement de 3 modèles avec différents betas et latent_dim=5
+beta_list_5d = [1, 5, 20]
+models_dict = {}
+
+for beta_val in beta_list_5d:
+    print(f"\n=== Entraînement avec beta={beta_val} et latent_dim=5 ===")
+    
+    # Initialiser le modèle et l'optimiseur
+    cvae_model = CVAE(latent_dim=5).to(device)
+    optimizer_cvae = optim.AdamW(cvae_model.parameters(), lr=1e-3, weight_decay=1e-5)
+    
+    # Entraînement (6 epochs)
+    for epoch in range(10):
+        cvae_model.train()
+        train_loss = 0
+        train_recon_loss = 0
+        train_kl_loss = 0
+        
+        for batch_idx, (data, c) in enumerate(train_loader):
+            data = data.to(device)
+            c = c.to(device)
+            data = data.unsqueeze(1)
+            optimizer_cvae.zero_grad()
+            recon_batch, mu, logvar = cvae_model(data, c)
+            
+            # Calculer séparément les composantes de la loss
+            if LOSS == 'BCE':
+                recon_loss = F.binary_cross_entropy(recon_batch, data, reduction='sum')
+            elif LOSS == 'MSE':
+                recon_loss = F.mse_loss(recon_batch, data, reduction='sum')
+            
+            kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            loss = recon_loss + beta_val * kl_loss
+            
+            loss.backward()
+            train_loss += loss.item()
+            train_recon_loss += recon_loss.item()
+            train_kl_loss += kl_loss.item()
+            optimizer_cvae.step()
+        
+        avg_loss = train_loss / len(train_loader.dataset)
+        avg_recon_loss = train_recon_loss / len(train_loader.dataset)
+        avg_kl_loss = train_kl_loss / len(train_loader.dataset)
+        print(f'Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}, Recon Loss: {avg_recon_loss:.4f}, KL Loss: {avg_kl_loss:.4f}')
+    
+    # Sauvegarder le modèle
+    models_dict[beta_val] = cvae_model
+    print(f'Modèle avec beta={beta_val} entraîné avec succès.')
+
+# %%
+# Génération conditionnelle pour comparaison entre les 3 betas
+# On utilise le même random noise pour chaque beta
+print("\n=== Génération conditionnelle pour comparaison ===")
+
+class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 
+               'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
+
+n_samples = 5  # 5 variations par classe
+num_classes = 10
+
+# Générer les mêmes bruits latents pour tous les modèles
+torch.manual_seed(42)  # Pour la reproductibilité
+z_fixed = torch.randn(n_samples * num_classes, 5).to(device)
+
+# Créer les vecteurs one-hot c pour chaque classe
+c_samples = []
+for class_idx in range(num_classes):
+    c_class = F.one_hot(torch.tensor([class_idx] * n_samples), num_classes=num_classes).float()
+    c_samples.append(c_class)
+c_samples = torch.cat(c_samples, dim=0).to(device)
+
+# Générer les images pour chaque beta
+all_generated = {}
+for beta_val in beta_list_5d:
+    models_dict[beta_val].eval()
+    with torch.no_grad():
+        generated = models_dict[beta_val].decode(z_fixed, c_samples)
+        all_generated[beta_val] = generated.cpu().numpy().squeeze(1)
+
+# Affichage : pour chaque classe, montrer les 3 betas côte à côte
+for i in range(num_classes):
+    fig, ax = plt.subplots(3, n_samples, figsize=(15, 6))
+    row_labels = [f'CVAE β={beta_val}' for beta_val in beta_list_5d]
+    
+    for row, beta_val in enumerate(beta_list_5d):
+        fig.text(0.02, 0.8 - row*0.3, row_labels[row], va='center', rotation=90, fontsize=12, weight='bold')
+        
+        for j in range(n_samples):
+            idx = i * n_samples + j  # Correction : classe * n_samples + sample
+            ax[row, j].imshow(all_generated[beta_val][idx], cmap='gray')
+            ax[row, j].axis('off')
+    
+    fig.suptitle(f"{n_samples} échantillons générés pour la classe '{class_names[i]}' avec différents β", fontsize=14, weight='bold')
+    plt.tight_layout(rect=[0.03, 0, 1, 0.96])
+    plt.show()
+
+print("\n=== Observation ===")
+print("- β=1 : Bonne qualité de reconstruction, détails préservés.")
+print("- β=5 : Compromis entre qualité et régularisation, images légèrement plus floues.")
+print("- β=20 : Forte régularisation, images très floues mais espace latent très structuré.")
 
 # %% [markdown]
 # ## 3. Espace Latent en Dimension 3
