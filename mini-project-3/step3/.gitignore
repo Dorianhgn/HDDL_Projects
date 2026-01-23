@@ -1,0 +1,11 @@
+# Modèles PyTorch trop volumineux pour GitHub
+*.pth
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Données volumineuses
+data/imagenette2/train/
+data/imagenette2/val/
