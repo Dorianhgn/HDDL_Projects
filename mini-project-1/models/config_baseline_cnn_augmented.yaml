@@ -1,0 +1,28 @@
+# =====================================================
+# BASELINE : Simple CNN From Scratch with Data Augmentation
+# Architecture : 4 blocs conv (32→64→128→256) + 2 FC
+# Objectif : Démontrer l'échec sans Transfer Learning
+# =====================================================
+
+model: models.classification_models.SimplePetCNN
+model_args:
+  num_classes: 37
+
+task: classification_fine
+criterion: CrossEntropyLoss
+
+epochs: 30  # Plus d'epochs pour laisser le temps d'apprendre
+batch_size: 32
+lr: 0.0001  # Learning rate faible pour limiter l'instabilité
+
+optimizer: Adam
+
+data_path: data/oxford-iiit-pet
+
+data_args:
+  - aug_percent: 0.5  # Augmentation à 50%
+  - train_test_split_ratio: 0.8
+  - dataset_variant: custom
+  - num_workers: 4
+
+path: models/temp_results/classification_fine/baseline_simple_cnn/

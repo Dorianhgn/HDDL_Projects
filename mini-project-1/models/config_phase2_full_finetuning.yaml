@@ -1,0 +1,33 @@
+# =====================================================
+# PHASE 2 : FULL FINE-TUNING
+# Backbone ResNet50 : DÉGELÉ (freeze_backbone=False)
+# Objectif : Affiner TOUT le réseau (backbone + tête)
+# ⚠️ CHARGE LES POIDS DE PHASE 1
+# =====================================================
+
+model: models.classification_models.ResNet50Pets
+model_args:
+  freeze_backbone: false  # ⚠️ BACKBONE DÉGELÉ
+  num_classes: 37
+
+task: classification_fine
+criterion: CrossEntropyLoss
+
+epochs: 40  # Plus d'epochs pour convergence fine
+batch_size: 32
+lr: 0.00001  # ⚠️ LR 100x PLUS FAIBLE (critique!)
+weight_decay: 0.0001
+
+data_path: data/oxford-iiit-pet
+
+data_args:
+  - aug_percent: 0.5  # Plus d'augmentation pour éviter overfitting
+  - train_test_split_ratio: 0.8
+  - dataset_variant: custom
+  - num_workers: 4
+
+# ⚠️⚠️⚠️ CHARGEMENT DES POIDS DE PHASE 1 ⚠️⚠️⚠️
+continue_training: false  # On n'utilise pas last.pth mais pretrained_path
+pretrained_path: models/temp_results/classification_fine/phase1_head_only/best.pth
+
+path: models/temp_results/classification_fine/phase2_full_finetuning/
