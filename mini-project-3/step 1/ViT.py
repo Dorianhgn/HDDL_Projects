@@ -69,8 +69,8 @@ class MultiHeadAttention(nn.Module):
         # Scaled dot-product attention
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.head_dim)  # (batch_size, num_heads, seq_len, seq_len)
 
-        if mask is not None:
-            scores = scores.masked_fill(mask == 0, float('-inf'))
+        if mask is not None: 
+            scores = scores.masked_fill(mask == 0, float('-inf'))   # pas besoin de mask ici pour le VIT
 
         attn_weights = torch.softmax(scores, dim=-1)  # (batch_size, num_heads, seq_len, seq_len)
         attn_output = torch.matmul(attn_weights, V)  # (batch_size, num_heads, seq_len, head_dim)
@@ -121,7 +121,6 @@ class TransformerEncoderBlock(nn.Module):
     #x = x + self.attention(x,x,x) # skip connection et attention
     attn_out = self.attention(self.norm1(x), self.norm1(x), self.norm1(x))
     x = x + attn_out  # skip connection
-
     x=self.norm2(x)
     x = x + self.feed_forward(x) # skip connection et feed forward
     return x
@@ -147,9 +146,9 @@ class ClassificationHead(nn.Module):
 
 class VisionTransformer(nn.Module):
     def __init__(self, 
-                 img_size=32, # à adapter au dataset
+                 img_size=28, # à adapter au dataset
                  patch_size=4, 
-                 in_channels=3, 
+                 in_channels=1, 
                  hidden_dim=128, 
                  num_heads=8, # nbr de têtes d'attention (par layer)
                  num_layers=6, # nbr de blocks transformer empilés 

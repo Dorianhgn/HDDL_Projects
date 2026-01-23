@@ -2,12 +2,13 @@ import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 
-def get_fashionmnist_loaders(batch_size=64, input_size=32, num_workers=2, pin_memory=True):
+def get_fashionmnist_loaders(batch_size=64, input_size=28, num_workers=2, pin_memory=True):
     transform = transforms.Compose([
-        transforms.Resize(input_size),
-        transforms.Grayscale(num_output_channels=3),
+        transforms.Resize(input_size),                   
+        #transforms.Grayscale(num_output_channels=3),    #si besoin de 3 canaux
         transforms.ToTensor(),
-        transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+        #transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+        transforms.Normalize(mean=(0.5,), std=(0.5,))
     ])
 
     train_dataset = datasets.FashionMNIST(
