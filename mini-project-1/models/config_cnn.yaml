@@ -2,10 +2,12 @@
 # Parameters are trained (end backbone + head)
 
 model: models.classification_binaire.ClassificationNetwork
+model_args :
+
 
 task: classification
 criterion: BCEWithLogitsLoss
-epochs: 20
+epochs: 30
 batch_size: 16  # Smaller batch for full fine-tuning
 lr: 0.0001  # Lower learning rate for fine-tuning
 weight_decay: 0.0001
@@ -18,4 +20,4 @@ data_args:
   - dataset_variant: custom
   - num_workers: 3
 
-path: models/temp_results/classification/cnn/
+path: models/temp_results/classification/cnn_data_augmentation/

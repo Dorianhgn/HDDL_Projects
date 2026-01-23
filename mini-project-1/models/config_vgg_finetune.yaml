@@ -3,7 +3,7 @@
 
 model: models.classification_binaire.MyVGGClassifier
 model_args:
-  finetune: True
+  - finetune: True
 
 task: classification
 criterion: BCEWithLogitsLoss

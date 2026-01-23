@@ -62,17 +62,30 @@ class ClassificationNetwork(nn.Module):
         return x
     
 
+from torchvision import models
+
 class MyVGGClassifier(nn.Module):
-    def __init__(self, conv_base, num_classes=2):
+    def __init__(self, freeze_base=True, finetune=False):
         super().__init__()
-        self.conv_base = conv_base
+        self.conv_base = models.vgg16(weights=models.VGG16_Weights.IMAGENET1K_V1).features
         self.avgpool = nn.AdaptiveAvgPool2d((7,7))  # comme dans VGG16
         self.flatten = nn.Flatten()
         self.fc = nn.Linear(512*7*7, 1)   
+
+        if freeze_base:
+            for param in self.conv_base.parameters():
+                param.requires_grad = False
         
+        if finetune==True:
+            for i in [-3, -2, -1]:
+                for param in self.conv_base[i].parameters():
+                    param.requires_grad = True
+
+
     def forward(self, x):
         x = self.conv_base(x)
         x = self.avgpool(x)
         x = self.flatten(x)
-        x = self.fc(x)
+        x = self.fc(x)         
         return x
+    
